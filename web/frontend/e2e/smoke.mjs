@@ -1,0 +1,11 @@
+import { chromium } from "playwright";
+const base = process.argv[2] ?? "http://localhost:5173";
+const browser = await chromium.launch();
+const page = await browser.newPage();
+const errors = [];
+page.on("pageerror", (e) => errors.push(e.message));
+page.on("console", (m) => { if (m.type() === "error" || m.type() === "warning") errors.push(m.text().slice(0, 160)); });
+await page.goto(base + "/play");
+await page.waitForSelector("button:has-text('К бою'):not([disabled])", { timeout: 30000 });
+console.log(base, "модель:", await page.locator(".header__sub").textContent(), "| ошибки:", errors.length ? errors : "нет");
+await browser.close();

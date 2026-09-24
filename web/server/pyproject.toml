@@ -1,0 +1,26 @@
+[project]
+name = "battleship-server"
+version = "0.1.0"
+description = "Морской бой: арбитр человек-человек, приёмник телеметрии, API для мобилки"
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.30",
+    "sqlalchemy[asyncio]>=2.0",
+    "asyncpg>=0.29",
+    "alembic>=1.13",
+    "pydantic>=2",
+    "pydantic-settings>=2",
+]
+
+[project.optional-dependencies]
+dev = ["pytest", "pytest-asyncio", "httpx", "numpy<2"]  # numpy — for the export test via model/battleship/telemetry
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "session"
+asyncio_default_test_loop_scope = "session"
+testpaths = ["tests"]
+
+[tool.setuptools]
+packages = ["app"]

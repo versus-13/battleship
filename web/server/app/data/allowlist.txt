@@ -1,0 +1,25 @@
+# Tokens (normalized, collapsed) that are not a violation even if they contain
+# a root from the stop-list. One entry per line.
+scunthorpe
+sussex
+essex
+middlesex
+therapist
+torpedo
+grape
+scrape
+mississippi
+cocktail
+hancock
+hitchcock
+peacock
+dickens
+skill
+skills
+killer
+fukuoka
+analyst
+analytics
+heroine
+prometheus
+крадун

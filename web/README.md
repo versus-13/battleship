@@ -1,0 +1,176 @@
+# Battleship — web
+
+Browser game: human vs model (the AI runs in the browser via onnxruntime-web)
+and human vs human online (the server is the referee). No login: the server
+issues the player id and secret, the client keeps them in localStorage.
+
+```
+web/
+  frontend/   Vite + React + TypeScript
+  server/     FastAPI + Postgres (H2H referee, telemetry, API for the mobile app)
+  fixtures/   references generated from model/ for cross-checking the engines (engine.json, onnx.json)
+```
+
+## Development
+
+Requires: Node 20, Python 3.11, Postgres (locally on :5432).
+
+```bash
+# server
+cd web/server
+python3.11 -m venv .venv && .venv/bin/pip install -r requirements.txt pytest pytest-asyncio httpx
+createdb battleship && createdb battleship_test
+.venv/bin/alembic upgrade head
+BS_DATABASE_URL=postgresql+asyncpg://localhost:5432/battleship_test .venv/bin/alembic upgrade head
+.venv/bin/uvicorn app.main:app --reload --port 8000
+
+# frontend (second terminal)
+cd web/frontend
+npm install
+npm run dev            # http://localhost:5173, /api and /ws are proxied to :8000
+```
+
+Server settings are `BS_*` environment variables (see `server/app/config.py`):
+`BS_DATABASE_URL`, `BS_CORS_ORIGINS`, H2H timers, `BS_STATIC_DIR` to serve the built frontend.
+
+## Tests
+
+```bash
+cd web/server && .venv/bin/pytest          # rules ≡ game.py, moderation, REST, WebSocket match
+cd web/frontend && npm test                 # engine ≡ game.py, ONNX in wasm ≡ ORT in Python
+cd web/frontend && node e2e/local.mjs       # a game vs the model in headless Chromium (both dev servers required)
+cd web/frontend && node e2e/online.mjs      # two players: room by link, reconnect, end of game
+cd web/frontend && node e2e/queue.mjs       # name moderation, random queue, surrender
+```
+
+Fixtures are regenerated from Python (`model/`):
+`python -m battleship.fixtures` (engine.json) and `python -m battleship.export_onnx` (onnx.json + the model).
+
+## Deploying to a VPS
+
+Layout: nginx on the host terminates SSL and proxies `/api`, `/ws`, `/healthz` to the
+`api` container (127.0.0.1:8000), everything else to the `frontend` container
+(127.0.0.1:8080, nginx with static files). Postgres is the `db` container, not exposed.
+
+Images are built by GitHub Actions (`.github/workflows/web.yml`): tests on every push and
+PR, on a push to `master` — build and publish to GHCR:
+`ghcr.io/versus-13/battleship-api` and `ghcr.io/versus-13/battleship-frontend`, tags
+`latest` and `<sha>`. The VPS needs neither sources nor a build — only Docker, nginx and
+three files.
+
+Ubuntu 24.04, 1–2 vCPU, 2 GB RAM is enough. The domain must point to the VPS IP with an
+A record. The image packages on GitHub must be public (Package → Settings → Change
+visibility), otherwise the VPS needs `docker login ghcr.io` with a `read:packages` token.
+
+```bash
+# 1. on the VPS: docker and nginx
+sudo apt update && sudo apt install -y nginx certbot python3-certbot-nginx
+curl -fsSL https://get.docker.com | sudo sh && sudo usermod -aG docker $USER   # re-login
+
+# 2. three files from the repository (web/deploy/) — scp from the dev machine also works
+sudo mkdir -p /opt/battleship && sudo chown $USER /opt/battleship && cd /opt/battleship
+curl -fsSLO https://raw.githubusercontent.com/versus-13/battleship/master/web/deploy/docker-compose.prod.yml
+curl -fsSLO https://raw.githubusercontent.com/versus-13/battleship/master/web/deploy/backup.sh
+curl -fsSLO https://raw.githubusercontent.com/versus-13/battleship/master/web/deploy/nginx-site.conf
+mv docker-compose.prod.yml docker-compose.yml && chmod +x backup.sh
+echo "POSTGRES_PASSWORD=$(openssl rand -hex 24)" > .env
+
+# 3. containers (migrations run when api starts)
+docker compose pull && docker compose up -d
+curl -s localhost:8000/healthz        # {"ok":true,...}
+curl -sI localhost:8080/ | head -1    # HTTP/1.1 200
+
+# 4. host nginx + certificate
+sudo cp nginx-site.conf /etc/nginx/sites-available/battleship
+sudo sed -i "s/example.com/your.domain/" /etc/nginx/sites-available/battleship
+sudo ln -s /etc/nginx/sites-available/battleship /etc/nginx/sites-enabled/
+sudo rm -f /etc/nginx/sites-enabled/default
+sudo nginx -t && sudo systemctl reload nginx
+sudo certbot --nginx -d your.domain    # adds listen 443 and the redirect from 80
+
+# 5. firewall and backups
+sudo ufw allow OpenSSH && sudo ufw allow "Nginx Full" && sudo ufw enable
+(crontab -l 2>/dev/null; echo "0 4 * * * /opt/battleship/backup.sh") | crontab -
+```
+
+**Updating** (once the workflow on `master` is green):
+
+```bash
+cd /opt/battleship && docker compose pull && docker compose up -d
+```
+
+Restarting `api` aborts H2H matches in progress (players get a forfeit by timer) — update
+during quiet hours. Roll back to a specific commit: `TAG=<sha> docker compose up -d`.
+Frontend only: `docker compose pull frontend && docker compose up -d frontend`.
+
+Useful: `docker compose logs -f api`, `docker compose exec db psql -U battleship`,
+restore from a backup — `docker compose exec -T db pg_restore -U battleship -d battleship -c < backups/file.dump`.
+
+Local image build without a registry — `docker compose up -d --build` from `web/`
+(the `docker-compose.yml` in `web/` builds from sources).
+
+**A single worker is mandatory**: H2H matches live in the memory of the `api` process.
+Scaling beyond one machine would require Redis for the match registry.
+
+## API (for the mobile app)
+
+Authentication: `POST /api/players` → `{player_id, secret}`; then
+`Authorization: Bearer <secret>`. The secret lives on the device, there is no recovery —
+losing the storage = a new identity.
+
+| | |
+|---|---|
+| `GET /api/players/me` | profile and stats |
+| `PUT /api/players/me/name` `{name}` | 422 `{detail:{code}}`: `too_short, too_long, invalid_chars, rejected_profanity, rate_limited` |
+| `GET /api/players/{id}/stats` | player stats |
+| `GET /api/leaderboard?min_games=&limit=` | human-vs-human games only |
+| `GET /api/model` | ONNX model version and URL (`obs` float32 [1,8,10,10] → `logits` [1,10,10]) |
+| `POST /api/games` | telemetry of a game vs the model, 1–2 logs (see `schemas.GamesIn`); the response is a receipt `{accepted:[id], rejected:[{index, code}]}` |
+| `POST /api/rooms` → `{code, match_id, ws_url}` | room by link |
+| `GET /api/rooms/{code}`, `POST /api/rooms/{code}/join` | info and join |
+| `POST /api/queue` → `queued \| matched` | random queue (poll every 2 s); `DELETE /api/queue` |
+| `GET /api/matches/current`, `GET /api/matches/{id}` | current match and its snapshot |
+| `WS /ws/matches/{id}` | first message `{"t":"hello","token":secret}` |
+
+WebSocket, client → server: `place{ships, mode}`, `shoot{cell}`, `leave`, `ping`, `state`.
+Server → client: `state` (full snapshot, on every connection), `opponent_joined`,
+`opponent_ready`, `opponent_left{grace_s}`, `opponent_back`, `placed`, `start{your_turn}`,
+`shot_result` / `opponent_shot` `{cell, result 0|1|2, sunk_cells, revealed, your_turn, alive}`,
+`game_over{winner, you_won, reason, enemy_ships}`, `error{code}`.
+
+Placement — `[[idx,…] × 10]`, cells 0..99, `idx = row*10 + col`. Columns А…К, rows 1–10:
+"Д6" = col 4, row 5.
+
+### Telemetry
+
+The unit is one attacker against one board; a game vs the model = two logs. Body of
+`POST /api/games`:
+
+```json
+{"client_game_id": "uuid", "mode": "h2m", "client": "web", "client_version": "web-0.1.0",
+ "client_info": {"platform": "MacIntel", "screen": [1440, 900], "touch": false,
+                 "placement": "random|manual", "model_backend": "int8-35d9f084"},
+ "logs": [
+   {"attacker": {"kind": "player"}, "defender": {"kind": "model_board"},
+    "ships": [[0,1,2,3], …], "shots": [44, 45, …], "think_ms": [1200, 800, …],
+    "started_at": 1800000000.5, "fleet_cleared": true, "won": true},
+   {"attacker": {"kind": "model", "version": "int8-35d9f084"}, "defender": {"kind": "player"}, …}
+ ]}
+```
+
+`think_ms` — time per move (for the model — inference latency), the only thing replay
+cannot restore; `client_info` — a whitelist of keys only, no personal data. An unfinished
+game is sent on leaving the page with `won: null`. In H2H the server records `think_ms`
+and the placement mode (`place{ships, mode}`) itself.
+
+Export: `python -m scripts.export_logs --out logs.jsonl [--all]` → JSONL in the
+`model/battleship/telemetry.GameLog` format (`outcome`: `finished` — board cleared,
+`lost` — played to the end but the opponent cleared first, `abandoned` — not finished).
+Analysis: `cd model && python -m battleship.analyze --logs logs.jsonl --ckpt battleship/net.pt`.
+
+## Name moderation
+
+`server/app/moderation.py` + `data/stoplist.txt` (`=word` — exact match, `~root` —
+substring) and `data/allowlist.txt` for false positives. Normalization strips case,
+homoglyphs, digit-letters, separators and repeats. Rejected names are not stored, only
+a counter of reasons in `name_rejects`.

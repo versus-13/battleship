@@ -1,0 +1,41 @@
+# Production on a VPS. The host nginx terminates SSL and proxies:
+#   /api, /ws, /healthz -> 127.0.0.1:8000 (api)
+#   everything else     -> 127.0.0.1:8080 (frontend)
+# The DB password is in .env (see .env.example). No ports are published externally.
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: battleship
+      POSTGRES_USER: battleship
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./backups:/backups
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U battleship"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  api:
+    build: ./server
+    restart: unless-stopped
+    environment:
+      BS_DATABASE_URL: postgresql+asyncpg://battleship:${POSTGRES_PASSWORD}@db:5432/battleship
+      BS_CORS_ORIGINS: '[]'
+    ports:
+      - "127.0.0.1:8000:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+
+  frontend:
+    build: ./frontend
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8080:80"
+
+volumes:
+  pgdata:

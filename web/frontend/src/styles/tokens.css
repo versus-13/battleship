@@ -1,0 +1,60 @@
+/* Tokens from design/DESIGN.md. Light theme — squared notebook paper, dark — chalk on a blackboard. */
+:root {
+  --paper: #FAF8F1;
+  --page-line: #D6E0E9;
+  --grid-line: #A9C3D8;
+  --ink: #2A4A9A;
+  --ink-rgb: 42, 74, 154;
+  --text: #1B2F63;
+  --hit: #C2392F;
+  --hit-rgb: 194, 57, 47;
+  --pencil: #6A7280;
+  --pencil-rgb: 106, 114, 128;
+  --ship-fill: rgba(42, 74, 154, 0.10);
+  --sunk-fill: rgba(194, 57, 47, 0.12);
+  --hover: rgba(42, 74, 154, 0.09);
+  --miss-opacity: 0.5;
+  --aim-opacity: 0.07;
+  --divider: rgba(42, 74, 154, 0.3);
+  --margin-line: rgba(194, 57, 47, 0.32);
+  --btn-shadow: rgba(42, 74, 154, 0.18);
+  --btn-secondary-border: rgba(106, 114, 128, 0.7);
+  --chip-ink: rgba(42, 74, 154, 0.45);
+  --chip-hit: rgba(194, 57, 47, 0.5);
+  --chip-grey: rgba(106, 114, 128, 0.5);
+  --counter-sunk-bg: rgba(194, 57, 47, 0.14);
+  --danger-fill: rgba(194, 57, 47, 0.18);
+
+  --cell: 40px;
+  --font-hand: 'Caveat', 'Segoe Script', cursive;
+  --font-mono: 'IBM Plex Mono', ui-monospace, Menlo, monospace;
+  color-scheme: light;
+}
+
+:root[data-theme="dark"] {
+  --paper: #14161A;
+  --page-line: #262B33;
+  --grid-line: #39424F;
+  --ink: #8FB6E8;
+  --ink-rgb: 143, 182, 232;
+  --text: #E7E4DA;
+  --hit: #E8695C;
+  --hit-rgb: 232, 105, 92;
+  --pencil: #8B9098;
+  --pencil-rgb: 139, 144, 152;
+  --ship-fill: rgba(143, 182, 232, 0.12);
+  --sunk-fill: rgba(232, 105, 92, 0.16);
+  --hover: rgba(143, 182, 232, 0.12);
+  --miss-opacity: 0.6;
+  --aim-opacity: 0.1;
+  --divider: rgba(143, 182, 232, 0.35);
+  --margin-line: rgba(232, 105, 92, 0.35);
+  --btn-shadow: rgba(143, 182, 232, 0.22);
+  --btn-secondary-border: rgba(139, 144, 152, 0.8);
+  --chip-ink: rgba(143, 182, 232, 0.5);
+  --chip-hit: rgba(232, 105, 92, 0.55);
+  --chip-grey: rgba(139, 144, 152, 0.6);
+  --counter-sunk-bg: rgba(232, 105, 92, 0.18);
+  --danger-fill: rgba(232, 105, 92, 0.22);
+  color-scheme: dark;
+}

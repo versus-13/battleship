@@ -1,0 +1,43 @@
+# --- general ---
+.DS_Store
+.claude/
+.idea/
+.vscode/
+*.log
+
+# --- python (model/, web/server/) ---
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+*.egg-info/
+
+# --- secrets ---
+.env
+.env.*
+!.env.example
+
+# --- web/frontend ---
+node_modules/
+web/frontend/dist/
+web/frontend/e2e/shots/
+
+# --- web: database backups ---
+web/backups/*.dump
+
+# --- kmp (Compose Multiplatform / Gradle) ---
+kmp/build/
+kmp/**/build/
+kmp/.gradle/
+kmp/.kotlin/
+kmp/local.properties
+kmp/*.iml
+kmp/**/*.iml
+kmp/captures/
+kmp/.cxx/
+kmp/iosApp/Pods/
+kmp/iosApp/**/xcuserdata/
+
+# --- vite / tsc cache ---
+.vite/
+*.tsbuildinfo

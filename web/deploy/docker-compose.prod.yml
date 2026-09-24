@@ -1,0 +1,40 @@
+# Production on a VPS: prebuilt images from GHCR (built by GitHub Actions on push to master).
+# Put it at /opt/battleship/docker-compose.yml next to .env (POSTGRES_PASSWORD).
+# Update: docker compose pull && docker compose up -d
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: battleship
+      POSTGRES_USER: battleship
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./backups:/backups
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U battleship"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  api:
+    image: ghcr.io/versus-13/battleship-api:${TAG:-latest}
+    restart: unless-stopped
+    environment:
+      BS_DATABASE_URL: postgresql+asyncpg://battleship:${POSTGRES_PASSWORD}@db:5432/battleship
+      BS_CORS_ORIGINS: '[]'
+    ports:
+      - "127.0.0.1:8000:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+
+  frontend:
+    image: ghcr.io/versus-13/battleship-frontend:${TAG:-latest}
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8080:80"
+
+volumes:
+  pgdata:

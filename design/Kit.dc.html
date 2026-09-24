@@ -1,0 +1,161 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>Морской бой — элементы и палитра</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Caveat:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<style>
+body { margin: 0; font-family: 'IBM Plex Mono', ui-monospace, Menlo, monospace; }
+a { color: #1B2F63; text-decoration: none; }
+a:hover { color: #2A4A9A; }
+</style>
+</helmet>
+<div style="width: 1440px; height: 660px; box-sizing: border-box; position: relative; padding: 40px 40px 40px 80px; display: flex; flex-direction: column; gap: 40px; background-color: #FAF8F1; background-image: repeating-linear-gradient(to right, #D6E0E9 0 1px, transparent 1px 40px), repeating-linear-gradient(to bottom, #D6E0E9 0 1px, transparent 1px 40px); color: #1B2F63;">
+
+  <div style="position: absolute; left: 40px; top: 0; bottom: 0; width: 1px; background: rgba(194, 57, 47, 0.32);"></div>
+
+  <div style="height: 140px; display: flex; gap: 40px;">
+    <div style="width: 640px; display: flex; flex-direction: column; gap: 10px;">
+      <span style="font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; color: #6A7280;">Caveat · рукописный</span>
+      <span style="font-family: 'Caveat', 'Segoe Script', cursive; font-weight: 700; font-size: 46px; line-height: 1.1; color: #1B2F63;">Морской бой — А Б В Г Д 1 2 3</span>
+      <span style="font-size: 11px; color: #6A7280;">заголовки, статус хода, буквы и цифры по краям поля</span>
+    </div>
+    <div style="width: 640px; display: flex; flex-direction: column; gap: 10px;">
+      <span style="font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; color: #6A7280;">IBM Plex Mono · машинописный</span>
+      <span style="font-size: 26px; line-height: 1.3; letter-spacing: 0.02em; color: #1B2F63;">АБВГДЕЖЗИК 1234567890</span>
+      <span style="font-size: 11px; color: #6A7280;">подписи полей, счётчики, журнал ходов, координаты</span>
+    </div>
+  </div>
+
+  <div style="height: 400px; display: flex; gap: 40px;">
+
+    <div style="width: 640px; height: 400px; box-sizing: border-box; padding: 28px; display: flex; flex-direction: column; gap: 24px; background-color: #FAF8F1; background-image: repeating-linear-gradient(to right, #D6E0E9 0 1px, transparent 1px 40px), repeating-linear-gradient(to bottom, #D6E0E9 0 1px, transparent 1px 40px); box-shadow: 0 0 0 1.5px rgba(42, 74, 154, 0.5);">
+      <span style="font-family: 'Caveat', 'Segoe Script', cursive; font-size: 30px; line-height: 1; color: #1B2F63;">Светлая тема — лист в клетку</span>
+
+      <div style="display: flex; flex-direction: column; gap: 10px;">
+        <span style="font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; color: #6A7280;">Палитра</span>
+        <div style="display: flex; gap: 4px;">
+          <div style="width: 76px; display: flex; flex-direction: column; gap: 5px;"><span style="display: block; width: 40px; height: 40px; background: #FAF8F1; box-shadow: 0 0 0 1px rgba(27, 47, 99, 0.25);"></span><span style="font-size: 10px; color: #1B2F63;">бумага</span><span style="font-size: 9px; color: #6A7280;">#FAF8F1</span></div>
+          <div style="width: 76px; display: flex; flex-direction: column; gap: 5px;"><span style="display: block; width: 40px; height: 40px; background: #D6E0E9; box-shadow: 0 0 0 1px rgba(27, 47, 99, 0.25);"></span><span style="font-size: 10px; color: #1B2F63;">клетка</span><span style="font-size: 9px; color: #6A7280;">#D6E0E9</span></div>
+          <div style="width: 76px; display: flex; flex-direction: column; gap: 5px;"><span style="display: block; width: 40px; height: 40px; background: #A9C3D8; box-shadow: 0 0 0 1px rgba(27, 47, 99, 0.25);"></span><span style="font-size: 10px; color: #1B2F63;">линия поля</span><span style="font-size: 9px; color: #6A7280;">#A9C3D8</span></div>
+          <div style="width: 76px; display: flex; flex-direction: column; gap: 5px;"><span style="display: block; width: 40px; height: 40px; background: #2A4A9A; box-shadow: 0 0 0 1px rgba(27, 47, 99, 0.25);"></span><span style="font-size: 10px; color: #1B2F63;">паста</span><span style="font-size: 9px; color: #6A7280;">#2A4A9A</span></div>
+          <div style="width: 76px; display: flex; flex-direction: column; gap: 5px;"><span style="display: block; width: 40px; height: 40px; background: #1B2F63; box-shadow: 0 0 0 1px rgba(27, 47, 99, 0.25);"></span><span style="font-size: 10px; color: #1B2F63;">текст</span><span style="font-size: 9px; color: #6A7280;">#1B2F63</span></div>
+          <div style="width: 76px; display: flex; flex-direction: column; gap: 5px;"><span style="display: block; width: 40px; height: 40px; background: #C2392F; box-shadow: 0 0 0 1px rgba(27, 47, 99, 0.25);"></span><span style="font-size: 10px; color: #1B2F63;">попадание</span><span style="font-size: 9px; color: #6A7280;">#C2392F</span></div>
+          <div style="width: 76px; display: flex; flex-direction: column; gap: 5px;"><span style="display: block; width: 40px; height: 40px; background: #6A7280; box-shadow: 0 0 0 1px rgba(27, 47, 99, 0.25);"></span><span style="font-size: 10px; color: #1B2F63;">карандаш</span><span style="font-size: 9px; color: #6A7280;">#6A7280</span></div>
+        </div>
+      </div>
+
+      <div style="display: flex; flex-direction: column; gap: 10px;">
+        <span style="font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; color: #6A7280;">Состояния клетки</span>
+        <div style="display: flex; gap: 4px;">
+          <div style="width: 76px; display: flex; flex-direction: column; gap: 6px;">
+            <span style="display: block; width: 40px; height: 40px; box-shadow: 0 0 0 1px #A9C3D8;"></span>
+            <span style="font-size: 10px; color: #6A7280;">пусто</span>
+          </div>
+          <div style="width: 76px; display: flex; flex-direction: column; gap: 6px;">
+            <span style="display: block; position: relative; width: 40px; height: 40px; box-shadow: 0 0 0 1px #A9C3D8;"><svg viewBox="0 0 40 40" width="40" height="40" aria-hidden="true" style="display: block;"><rect x="0.5" y="0.5" width="39" height="39" fill="#2A4A9A" fill-opacity="0.07"></rect><path d="M20 5 L20 14 M20 26 L20 35 M5 20 L14 20 M26 20 L35 20" fill="none" stroke="#2A4A9A" stroke-width="1.6" stroke-linecap="round"></path><circle cx="20" cy="20" r="6.5" fill="none" stroke="#2A4A9A" stroke-width="1.3" stroke-dasharray="2.5 3"></circle></svg></span>
+            <span style="font-size: 10px; color: #6A7280;">прицел</span>
+          </div>
+          <div style="width: 76px; display: flex; flex-direction: column; gap: 6px;">
+            <span style="display: block; position: relative; width: 40px; height: 40px; box-shadow: 0 0 0 1px #A9C3D8;"><svg viewBox="0 0 40 40" width="40" height="40" aria-hidden="true" style="display: block;"><circle cx="20" cy="20.5" r="3" fill="#2A4A9A" fill-opacity="0.5"></circle></svg></span>
+            <span style="font-size: 10px; color: #6A7280;">мимо</span>
+          </div>
+          <div style="width: 76px; display: flex; flex-direction: column; gap: 6px;">
+            <span style="display: block; position: relative; width: 40px; height: 40px; box-shadow: 0 0 0 1px #A9C3D8;"><svg viewBox="0 0 40 40" width="40" height="40" aria-hidden="true" style="display: block;"><path d="M11 10.5 Q20.5 20 30 30" fill="none" stroke="#C2392F" stroke-width="2.6" stroke-linecap="round"></path><path d="M29.5 10.5 Q20 20.5 10.5 30" fill="none" stroke="#C2392F" stroke-width="2.6" stroke-linecap="round"></path></svg></span>
+            <span style="font-size: 10px; color: #6A7280;">попал</span>
+          </div>
+          <div style="width: 76px; display: flex; flex-direction: column; gap: 6px;">
+            <span style="display: block; position: relative; width: 40px; height: 40px; box-shadow: 0 0 0 1px #A9C3D8;"><svg viewBox="0 0 40 40" width="40" height="40" aria-hidden="true" style="position: absolute; left: 0; top: 0;"><path d="M6 6.4 L34.4 5.4 L35 33.8 L5.6 34.8 Z" fill="rgba(194, 57, 47, 0.12)" stroke="#C2392F" stroke-width="2.2" stroke-linejoin="round"></path><path d="M11 10.5 Q20.5 20 30 30" fill="none" stroke="#C2392F" stroke-width="2.6" stroke-linecap="round"></path><path d="M29.5 10.5 Q20 20.5 10.5 30" fill="none" stroke="#C2392F" stroke-width="2.6" stroke-linecap="round"></path></svg></span>
+            <span style="font-size: 10px; color: #6A7280;">убит</span>
+          </div>
+          <div style="width: 76px; display: flex; flex-direction: column; gap: 6px;">
+            <span style="display: block; position: relative; width: 40px; height: 40px; box-shadow: 0 0 0 1px #A9C3D8;"><svg viewBox="0 0 40 40" width="40" height="40" aria-hidden="true" style="position: absolute; left: 0; top: 0;"><path d="M6 6.4 L34.4 5.4 L35 33.8 L5.6 34.8 Z" fill="rgba(42, 74, 154, 0.10)" stroke="#2A4A9A" stroke-width="2.2" stroke-linejoin="round"></path></svg></span>
+            <span style="font-size: 10px; color: #6A7280;">мой корабль</span>
+          </div>
+          <div style="width: 76px; display: flex; flex-direction: column; gap: 6px;">
+            <span style="display: block; position: relative; width: 40px; height: 40px; box-shadow: 0 0 0 1px #A9C3D8;"><svg viewBox="0 0 40 40" width="40" height="40" aria-hidden="true" style="position: absolute; left: 0; top: 0;"><path d="M6 6.4 L34.4 5.4 L35 33.8 L5.6 34.8 Z" fill="rgba(42, 74, 154, 0.10)" stroke="#2A4A9A" stroke-width="2.2" stroke-linejoin="round"></path><path d="M11 10.5 Q20.5 20 30 30" fill="none" stroke="#C2392F" stroke-width="2.6" stroke-linecap="round"></path><path d="M29.5 10.5 Q20 20.5 10.5 30" fill="none" stroke="#C2392F" stroke-width="2.6" stroke-linecap="round"></path></svg></span>
+            <span style="font-size: 10px; color: #6A7280;">мой ранен</span>
+          </div>
+        </div>
+      </div>
+
+      <div style="display: flex; gap: 12px; align-items: center;">
+        <button type="button" style="height: 48px; padding: 0 22px; box-sizing: border-box; border: 1.5px solid #2A4A9A; border-radius: 2px; background: transparent; box-shadow: 3px 3px 0 rgba(42, 74, 154, 0.18); color: #1B2F63; font-family: 'Caveat', 'Segoe Script', cursive; font-size: 26px; cursor: pointer;">Новая игра</button>
+        <button type="button" style="height: 48px; padding: 0 22px; box-sizing: border-box; border: 1.5px dashed rgba(106, 114, 128, 0.7); border-radius: 2px; background: transparent; color: #6A7280; font-family: 'Caveat', 'Segoe Script', cursive; font-size: 24px; cursor: pointer;">Сдаться</button>
+      </div>
+    </div>
+
+    <div style="width: 640px; height: 400px; box-sizing: border-box; padding: 28px; display: flex; flex-direction: column; gap: 24px; background-color: #14161A; background-image: repeating-linear-gradient(to right, #262B33 0 1px, transparent 1px 40px), repeating-linear-gradient(to bottom, #262B33 0 1px, transparent 1px 40px); box-shadow: 0 0 0 1.5px rgba(143, 182, 232, 0.5);">
+      <span style="font-family: 'Caveat', 'Segoe Script', cursive; font-size: 30px; line-height: 1; color: #E7E4DA;">Тёмная тема — мел на доске</span>
+
+      <div style="display: flex; flex-direction: column; gap: 10px;">
+        <span style="font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; color: #8B9098;">Палитра</span>
+        <div style="display: flex; gap: 4px;">
+          <div style="width: 76px; display: flex; flex-direction: column; gap: 5px;"><span style="display: block; width: 40px; height: 40px; background: #14161A; box-shadow: 0 0 0 1px rgba(231, 228, 218, 0.3);"></span><span style="font-size: 10px; color: #E7E4DA;">фон</span><span style="font-size: 9px; color: #8B9098;">#14161A</span></div>
+          <div style="width: 76px; display: flex; flex-direction: column; gap: 5px;"><span style="display: block; width: 40px; height: 40px; background: #262B33; box-shadow: 0 0 0 1px rgba(231, 228, 218, 0.3);"></span><span style="font-size: 10px; color: #E7E4DA;">клетка</span><span style="font-size: 9px; color: #8B9098;">#262B33</span></div>
+          <div style="width: 76px; display: flex; flex-direction: column; gap: 5px;"><span style="display: block; width: 40px; height: 40px; background: #39424F; box-shadow: 0 0 0 1px rgba(231, 228, 218, 0.3);"></span><span style="font-size: 10px; color: #E7E4DA;">линия поля</span><span style="font-size: 9px; color: #8B9098;">#39424F</span></div>
+          <div style="width: 76px; display: flex; flex-direction: column; gap: 5px;"><span style="display: block; width: 40px; height: 40px; background: #8FB6E8; box-shadow: 0 0 0 1px rgba(231, 228, 218, 0.3);"></span><span style="font-size: 10px; color: #E7E4DA;">мел</span><span style="font-size: 9px; color: #8B9098;">#8FB6E8</span></div>
+          <div style="width: 76px; display: flex; flex-direction: column; gap: 5px;"><span style="display: block; width: 40px; height: 40px; background: #E7E4DA; box-shadow: 0 0 0 1px rgba(231, 228, 218, 0.3);"></span><span style="font-size: 10px; color: #E7E4DA;">текст</span><span style="font-size: 9px; color: #8B9098;">#E7E4DA</span></div>
+          <div style="width: 76px; display: flex; flex-direction: column; gap: 5px;"><span style="display: block; width: 40px; height: 40px; background: #E8695C; box-shadow: 0 0 0 1px rgba(231, 228, 218, 0.3);"></span><span style="font-size: 10px; color: #E7E4DA;">попадание</span><span style="font-size: 9px; color: #8B9098;">#E8695C</span></div>
+          <div style="width: 76px; display: flex; flex-direction: column; gap: 5px;"><span style="display: block; width: 40px; height: 40px; background: #8B9098; box-shadow: 0 0 0 1px rgba(231, 228, 218, 0.3);"></span><span style="font-size: 10px; color: #E7E4DA;">карандаш</span><span style="font-size: 9px; color: #8B9098;">#8B9098</span></div>
+        </div>
+      </div>
+
+      <div style="display: flex; flex-direction: column; gap: 10px;">
+        <span style="font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; color: #8B9098;">Состояния клетки</span>
+        <div style="display: flex; gap: 4px;">
+          <div style="width: 76px; display: flex; flex-direction: column; gap: 6px;">
+            <span style="display: block; width: 40px; height: 40px; box-shadow: 0 0 0 1px #39424F;"></span>
+            <span style="font-size: 10px; color: #8B9098;">пусто</span>
+          </div>
+          <div style="width: 76px; display: flex; flex-direction: column; gap: 6px;">
+            <span style="display: block; position: relative; width: 40px; height: 40px; box-shadow: 0 0 0 1px #39424F;"><svg viewBox="0 0 40 40" width="40" height="40" aria-hidden="true" style="display: block;"><rect x="0.5" y="0.5" width="39" height="39" fill="#8FB6E8" fill-opacity="0.1"></rect><path d="M20 5 L20 14 M20 26 L20 35 M5 20 L14 20 M26 20 L35 20" fill="none" stroke="#8FB6E8" stroke-width="1.6" stroke-linecap="round"></path><circle cx="20" cy="20" r="6.5" fill="none" stroke="#8FB6E8" stroke-width="1.3" stroke-dasharray="2.5 3"></circle></svg></span>
+            <span style="font-size: 10px; color: #8B9098;">прицел</span>
+          </div>
+          <div style="width: 76px; display: flex; flex-direction: column; gap: 6px;">
+            <span style="display: block; position: relative; width: 40px; height: 40px; box-shadow: 0 0 0 1px #39424F;"><svg viewBox="0 0 40 40" width="40" height="40" aria-hidden="true" style="display: block;"><circle cx="20" cy="20.5" r="3" fill="#8FB6E8" fill-opacity="0.6"></circle></svg></span>
+            <span style="font-size: 10px; color: #8B9098;">мимо</span>
+          </div>
+          <div style="width: 76px; display: flex; flex-direction: column; gap: 6px;">
+            <span style="display: block; position: relative; width: 40px; height: 40px; box-shadow: 0 0 0 1px #39424F;"><svg viewBox="0 0 40 40" width="40" height="40" aria-hidden="true" style="display: block;"><path d="M11 10.5 Q20.5 20 30 30" fill="none" stroke="#E8695C" stroke-width="2.6" stroke-linecap="round"></path><path d="M29.5 10.5 Q20 20.5 10.5 30" fill="none" stroke="#E8695C" stroke-width="2.6" stroke-linecap="round"></path></svg></span>
+            <span style="font-size: 10px; color: #8B9098;">попал</span>
+          </div>
+          <div style="width: 76px; display: flex; flex-direction: column; gap: 6px;">
+            <span style="display: block; position: relative; width: 40px; height: 40px; box-shadow: 0 0 0 1px #39424F;"><svg viewBox="0 0 40 40" width="40" height="40" aria-hidden="true" style="position: absolute; left: 0; top: 0;"><path d="M6 6.4 L34.4 5.4 L35 33.8 L5.6 34.8 Z" fill="rgba(232, 105, 92, 0.16)" stroke="#E8695C" stroke-width="2.2" stroke-linejoin="round"></path><path d="M11 10.5 Q20.5 20 30 30" fill="none" stroke="#E8695C" stroke-width="2.6" stroke-linecap="round"></path><path d="M29.5 10.5 Q20 20.5 10.5 30" fill="none" stroke="#E8695C" stroke-width="2.6" stroke-linecap="round"></path></svg></span>
+            <span style="font-size: 10px; color: #8B9098;">убит</span>
+          </div>
+          <div style="width: 76px; display: flex; flex-direction: column; gap: 6px;">
+            <span style="display: block; position: relative; width: 40px; height: 40px; box-shadow: 0 0 0 1px #39424F;"><svg viewBox="0 0 40 40" width="40" height="40" aria-hidden="true" style="position: absolute; left: 0; top: 0;"><path d="M6 6.4 L34.4 5.4 L35 33.8 L5.6 34.8 Z" fill="rgba(143, 182, 232, 0.12)" stroke="#8FB6E8" stroke-width="2.2" stroke-linejoin="round"></path></svg></span>
+            <span style="font-size: 10px; color: #8B9098;">мой корабль</span>
+          </div>
+          <div style="width: 76px; display: flex; flex-direction: column; gap: 6px;">
+            <span style="display: block; position: relative; width: 40px; height: 40px; box-shadow: 0 0 0 1px #39424F;"><svg viewBox="0 0 40 40" width="40" height="40" aria-hidden="true" style="position: absolute; left: 0; top: 0;"><path d="M6 6.4 L34.4 5.4 L35 33.8 L5.6 34.8 Z" fill="rgba(143, 182, 232, 0.12)" stroke="#8FB6E8" stroke-width="2.2" stroke-linejoin="round"></path><path d="M11 10.5 Q20.5 20 30 30" fill="none" stroke="#E8695C" stroke-width="2.6" stroke-linecap="round"></path><path d="M29.5 10.5 Q20 20.5 10.5 30" fill="none" stroke="#E8695C" stroke-width="2.6" stroke-linecap="round"></path></svg></span>
+            <span style="font-size: 10px; color: #8B9098;">мой ранен</span>
+          </div>
+        </div>
+      </div>
+
+      <div style="display: flex; gap: 12px; align-items: center;">
+        <button type="button" style="height: 48px; padding: 0 22px; box-sizing: border-box; border: 1.5px solid #8FB6E8; border-radius: 2px; background: transparent; box-shadow: 3px 3px 0 rgba(143, 182, 232, 0.22); color: #E7E4DA; font-family: 'Caveat', 'Segoe Script', cursive; font-size: 26px; cursor: pointer;">Новая игра</button>
+        <button type="button" style="height: 48px; padding: 0 22px; box-sizing: border-box; border: 1.5px dashed rgba(139, 144, 152, 0.8); border-radius: 2px; background: transparent; color: #8B9098; font-family: 'Caveat', 'Segoe Script', cursive; font-size: 24px; cursor: pointer;">Сдаться</button>
+      </div>
+    </div>
+
+  </div>
+
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":660}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return {};
+  }
+}
+</script>
+</body>
+</html>
