@@ -48,48 +48,47 @@ Fixtures are regenerated from Python (`model/`):
 
 ## Deploying to a VPS
 
-Layout: nginx on the host terminates SSL and proxies `/api`, `/ws`, `/healthz` to the
-`api` container (127.0.0.1:8000), everything else to the `frontend` container
-(127.0.0.1:8080, nginx with static files). Postgres is the `db` container, not exposed.
+The project ships only the containers, bound to localhost: `api` on 127.0.0.1:8000 and
+`frontend` (static files) on 127.0.0.1:8080. Postgres is the `db` container, not exposed.
+The reverse proxy with TLS is not part of the project and is set up separately; it must:
+
+* route `/api`, `/ws`, `/healthz` → `127.0.0.1:8000`, everything else → `127.0.0.1:8080`;
+* pass the WebSocket upgrade on `/ws` (`Upgrade`/`Connection` headers, HTTP/1.1) with a
+  read timeout well above the match timers — otherwise H2H connections drop mid-game;
+* set `X-Forwarded-Proto`/`X-Forwarded-For` (uvicorn runs with `--proxy-headers`);
+* not cache `/` — `index.html` must be re-fetched after each deploy (the frontend already
+  sends `Cache-Control: no-cache` for it and long-lived headers for `/assets/`, `/model/`).
 
 Images are built by GitHub Actions (`.github/workflows/web.yml`): tests on every push and
 PR, on a push to `master` — build and publish to GHCR:
 `ghcr.io/versus-13/battleship-api` and `ghcr.io/versus-13/battleship-frontend`, tags
-`latest` and `<sha>`. The VPS needs neither sources nor a build — only Docker, nginx and
-three files.
+`latest` and `<sha>`. The VPS needs neither sources nor a build — only Docker and two
+files.
 
-Ubuntu 24.04, 1–2 vCPU, 2 GB RAM is enough. The domain must point to the VPS IP with an
-A record. The image packages on GitHub must be public (Package → Settings → Change
-visibility), otherwise the VPS needs `docker login ghcr.io` with a `read:packages` token.
+Ubuntu 24.04, 1–2 vCPU, 2 GB RAM is enough. The image packages on GitHub must be public
+(Package → Settings → Change visibility), otherwise the VPS needs `docker login ghcr.io`
+with a `read:packages` token.
 
 ```bash
-# 1. on the VPS: docker and nginx
-sudo apt update && sudo apt install -y nginx certbot python3-certbot-nginx
+# 1. on the VPS: docker
 curl -fsSL https://get.docker.com | sudo sh && sudo usermod -aG docker $USER   # re-login
 
-# 2. three files from the repository (web/deploy/) — scp from the dev machine also works
+# 2. two files from the repository (web/deploy/) — scp from the dev machine also works
 sudo mkdir -p /opt/battleship && sudo chown $USER /opt/battleship && cd /opt/battleship
 curl -fsSLO https://raw.githubusercontent.com/versus-13/battleship/master/web/deploy/docker-compose.prod.yml
 curl -fsSLO https://raw.githubusercontent.com/versus-13/battleship/master/web/deploy/backup.sh
-curl -fsSLO https://raw.githubusercontent.com/versus-13/battleship/master/web/deploy/nginx-site.conf
 mv docker-compose.prod.yml docker-compose.yml && chmod +x backup.sh
 echo "POSTGRES_PASSWORD=$(openssl rand -hex 24)" > .env
+# optional: UID/GID for api and frontend (default 10001). It must NOT belong to a real
+# host user — especially not one in the docker group, which is root-equivalent.
+# echo -e "APP_UID=10001\nAPP_GID=10001" >> .env
 
 # 3. containers (migrations run when api starts)
 docker compose pull && docker compose up -d
 curl -s localhost:8000/healthz        # {"ok":true,...}
 curl -sI localhost:8080/ | head -1    # HTTP/1.1 200
 
-# 4. host nginx + certificate
-sudo cp nginx-site.conf /etc/nginx/sites-available/battleship
-sudo sed -i "s/example.com/your.domain/" /etc/nginx/sites-available/battleship
-sudo ln -s /etc/nginx/sites-available/battleship /etc/nginx/sites-enabled/
-sudo rm -f /etc/nginx/sites-enabled/default
-sudo nginx -t && sudo systemctl reload nginx
-sudo certbot --nginx -d your.domain    # adds listen 443 and the redirect from 80
-
-# 5. firewall and backups
-sudo ufw allow OpenSSH && sudo ufw allow "Nginx Full" && sudo ufw enable
+# 4. backups (the reverse proxy and firewall are configured separately)
 (crontab -l 2>/dev/null; echo "0 4 * * * /opt/battleship/backup.sh") | crontab -
 ```
 
