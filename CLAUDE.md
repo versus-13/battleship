@@ -238,8 +238,11 @@ phase (`split_by_phase`).
 
 ## Conventions
 
-* Comments and documentation — in English. User-facing UI strings and console
-  messages — in Russian.
+* Comments and documentation — in English. Console messages — in Russian.
+* UI strings live only in `web/frontend/src/i18n.ts` (English by default, Russian;
+  the choice is kept in localStorage `bs.lang`). A new string goes into both
+  dictionaries — `ru` is typed as `Dict`, so a missing key fails `tsc`. The e2e
+  scripts pin `ru`: their selectors are Russian.
 * Back any quality claim with a measurement on 300+ games with a fixed seed. Do not
   trust a difference below 1.5 shots.
 * Telemetry: pseudonymous ids, no personal data collected.

@@ -1,10 +1,12 @@
 import { FLEET } from "../engine/rules";
+import { useI18n } from "../i18n";
 
 /** Enemy fleet counter: for each size — how many alive and how many sunk. */
-export function FleetCounter({ alive, title = "Флот соперника" }: { alive: Record<number, number>; title?: string }) {
+export function FleetCounter({ alive, title }: { alive: Record<number, number>; title?: string }) {
+  const { t } = useI18n();
   return (
     <div className="fleet">
-      <span className="label">{title}</span>
+      <span className="label">{title ?? t.fleet.enemy}</span>
       {FLEET.map(([size, count]) => {
         const left = alive[size] ?? count;
         return (

@@ -3,6 +3,7 @@ import { Board, type ShipView } from "../components/Board";
 import { randomPlacement, type Ships } from "../engine/rules";
 import { conflicts, moveShip, rotateShip } from "../game/placement";
 import type { PlacementMode } from "../game/telemetry";
+import { useI18n } from "../i18n";
 
 interface Props {
   ships: Ships;
@@ -17,14 +18,15 @@ interface Props {
 }
 
 export function Placement(p: Props) {
+  const { t } = useI18n();
   const bad = useMemo(() => conflicts(p.ships), [p.ships]);
   const views: ShipView[] = p.ships.map((cells, i) => ({ cells, tone: bad.has(i) ? "danger" : "ink" }));
   const valid = bad.size === 0;
   return (
     <section className="battle">
       <Board
-        caption="Мой флот"
-        counter={valid ? "готово к бою" : "корабли касаются"}
+        caption={t.board.mine}
+        counter={valid ? t.board.ready : t.board.touching}
         cells={Array(100).fill("unknown")}
         ships={views}
         onShipMove={(i, dr, dc) => p.onChange(moveShip(p.ships, i, dr, dc), "manual")}
@@ -33,12 +35,12 @@ export function Placement(p: Props) {
       <aside className="panel">
         <div className="panel__status">
           <span className="status">{p.status}</span>
-          <span className="muted">{p.statusHint ?? "перетащите корабль — перенос, клик — поворот"}</span>
+          <span className="muted">{p.statusHint ?? t.placement.hint}</span>
         </div>
         <div className="divider" />
         <div className="panel__buttons">
-          <button type="button" className="btn btn--block" onClick={p.onConfirm} disabled={!valid || p.busy}>К бою</button>
-          <button type="button" className="btn btn--secondary btn--block" onClick={() => p.onChange(randomPlacement(), "random")} disabled={p.busy}>Перемешать</button>
+          <button type="button" className="btn btn--block" onClick={p.onConfirm} disabled={!valid || p.busy}>{p.confirmLabel ?? t.btn.toBattle}</button>
+          <button type="button" className="btn btn--secondary btn--block" onClick={() => p.onChange(randomPlacement(), "random")} disabled={p.busy}>{t.btn.shuffle}</button>
         </div>
         {p.extra}
       </aside>

@@ -3,19 +3,23 @@ import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { ApiError, api, displayName } from "../api/client";
 import { Header } from "../components/Header";
+import { useI18n } from "../i18n";
+
+type RoomError = "busy" | "notFound" | "taken" | "joinFailed";
 
 export function RoomJoin() {
   const { code = "" } = useParams();
+  const { t } = useI18n();
   const navigate = useNavigate();
-  const [host, setHost] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [host, setHost] = useState<{ name: string | null; tag: string } | null>(null);
+  const [error, setError] = useState<RoomError | null>(null);
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
     api.roomInfo(code).then((r) => {
-      if (r.status !== "waiting") setError("комната уже занята или игра закончилась");
-      setHost(displayName(r.host_name, r.host_tag));
-    }).catch(() => setError("комната не найдена"));
+      if (r.status !== "waiting") setError("busy");
+      setHost({ name: r.host_name, tag: r.host_tag });
+    }).catch(() => setError("notFound"));
   }, [code]);
 
   const join = async () => {
@@ -27,20 +31,20 @@ export function RoomJoin() {
         const mid = (e.body as { detail?: { match_id?: string } })?.detail?.match_id;
         if (mid) { navigate(`/match/${mid}`, { replace: true }); return; }
       }
-      setError(c === "room_unavailable" ? "комната уже занята" : "не удалось войти"); setBusy(false);
+      setError(c === "room_unavailable" ? "taken" : "joinFailed"); setBusy(false);
     }
   };
 
   return (
     <div className="page">
-      <Header subtitle="приглашение в матч" />
+      <Header subtitle={t.room.subtitle} />
       <section className="home__col">
-        <span className="status">Комната {code}</span>
-        {host && !error && <span className="muted">вас зовёт {host}</span>}
-        {error && <span className="error">{error}</span>}
+        <span className="status">{t.room.title(code)}</span>
+        {host && !error && <span className="muted">{t.room.invites(displayName(host.name, host.tag))}</span>}
+        {error && <span className="error">{t.room[error]}</span>}
         <div className="home__actions">
-          <button type="button" className="btn btn--block" onClick={join} disabled={!!error || !host || busy}>Принять вызов</button>
-          <button type="button" className="btn btn--secondary btn--block" onClick={() => navigate("/")}>На главную</button>
+          <button type="button" className="btn btn--block" onClick={join} disabled={!!error || !host || busy}>{t.btn.accept}</button>
+          <button type="button" className="btn btn--secondary btn--block" onClick={() => navigate("/")}>{t.btn.home}</button>
         </div>
       </section>
     </div>

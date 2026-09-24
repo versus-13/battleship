@@ -1,3 +1,4 @@
+import { tr } from "../i18n";
 import { clearIdentity, loadIdentity, saveIdentity, type Identity } from "./identity";
 
 export class ApiError extends Error {
@@ -72,5 +73,5 @@ export const api = {
 };
 
 export function displayName(name: string | null, tag: string) {
-  return name ? `${name}#${tag}` : `Игрок#${tag}`;
+  return name ? `${name}#${tag}` : `${tr().player}#${tag}`;
 }

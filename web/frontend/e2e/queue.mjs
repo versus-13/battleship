@@ -3,6 +3,7 @@ const browser = await chromium.launch();
 const errors = [];
 const mk = async (name) => {
   const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+  await ctx.addInitScript(() => localStorage.setItem("bs.lang", "ru")); // selectors below are Russian
   const page = await ctx.newPage();
   page.on("pageerror", (e) => errors.push(`${name} pageerror: ${e.message}`));
   page.on("console", (m) => { if (m.type() === "error") errors.push(`${name} console: ${m.text().slice(0, 200)}`); });

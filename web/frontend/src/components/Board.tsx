@@ -1,5 +1,6 @@
 import { useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
-import { CELLS, LETTERS, N, colOf, labelOf, rowOf, type Ships } from "../engine/rules";
+import { CELLS, N, colOf, rowOf, type Ships } from "../engine/rules";
+import { useI18n } from "../i18n";
 import { AimMark, HitMark, MissMark, ShipOutline, type ShipTone } from "./marks";
 
 export type CellView = "unknown" | "miss" | "hit" | "sunk";
@@ -32,6 +33,7 @@ export function shipGeometry(cells: number[]) {
 }
 
 export function Board(p: BoardProps) {
+  const { t } = useI18n();
   const boardRef = useRef<HTMLDivElement>(null);
   const [drag, setDrag] = useState<{ index: number; dr: number; dc: number } | null>(null);
   const start = useRef<{ index: number; x: number; y: number; moved: boolean } | null>(null);
@@ -75,7 +77,7 @@ export function Board(p: BoardProps) {
       </div>
       <div className="ruler">
         <div className="ruler__corner" />
-        {LETTERS.map((ch) => (
+        {t.letters.map((ch) => (
           <div key={ch} className="ruler__cell">{ch}</div>
         ))}
       </div>
@@ -96,7 +98,7 @@ export function Board(p: BoardProps) {
                     key={i}
                     type="button"
                     className="cell cell--btn"
-                    aria-label={labelOf(i)}
+                    aria-label={t.cell(i)}
                     disabled={p.disabled || st !== "unknown"}
                     onClick={() => p.onShoot?.(i)}
                   >

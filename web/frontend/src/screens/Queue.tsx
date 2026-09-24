@@ -3,11 +3,13 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { api } from "../api/client";
 import { Header } from "../components/Header";
+import { useI18n } from "../i18n";
 
 export function Queue() {
+  const { t } = useI18n();
   const navigate = useNavigate();
   const [seconds, setSeconds] = useState(0);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState(false);
 
   useEffect(() => {
     let stop = false;
@@ -16,7 +18,7 @@ export function Queue() {
         const r = await api.queue();
         if (stop) return;
         if (r.status === "matched" && r.match_id) { navigate(`/match/${r.match_id}`, { replace: true }); return; }
-      } catch { setError("нет связи с сервером"); }
+      } catch { setError(true); }
       if (!stop) setTimeout(poll, 2000);
     };
     void poll();
@@ -26,12 +28,12 @@ export function Queue() {
 
   return (
     <div className="page">
-      <Header subtitle="случайный соперник" />
+      <Header subtitle={t.queue.subtitle} />
       <section className="home__col">
-        <span className="status">Ищем соперника…</span>
-        <span className="muted">{error ?? `в очереди ${seconds} с · можно позвать друга по ссылке, если никого нет`}</span>
+        <span className="status">{t.queue.searching}</span>
+        <span className="muted">{error ? t.noServer : t.queue.waiting(seconds)}</span>
         <div className="home__actions">
-          <button type="button" className="btn btn--secondary btn--block" onClick={() => navigate("/")}>Отменить</button>
+          <button type="button" className="btn btn--secondary btn--block" onClick={() => navigate("/")}>{t.btn.cancel}</button>
         </div>
       </section>
     </div>

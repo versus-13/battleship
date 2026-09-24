@@ -4,6 +4,7 @@ import { mkdirSync } from "node:fs";
 mkdirSync(new URL("./shots", import.meta.url).pathname, { recursive: true });
 const browser = await chromium.launch();
 const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+await ctx.addInitScript(() => localStorage.setItem("bs.lang", "ru")); // selectors below are Russian
 const page = await ctx.newPage();
 const errors = [];
 page.on("pageerror", (e) => errors.push("pageerror: " + e.message));

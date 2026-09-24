@@ -2,6 +2,7 @@ import { chromium } from "playwright";
 const base = process.argv[2] ?? "http://localhost:5173";
 const browser = await chromium.launch();
 const page = await browser.newPage();
+await page.addInitScript(() => localStorage.setItem("bs.lang", "ru")); // selectors below are Russian
 const errors = [];
 page.on("pageerror", (e) => errors.push(e.message));
 page.on("console", (m) => { if (m.type() === "error" || m.type() === "warning") errors.push(m.text().slice(0, 160)); });

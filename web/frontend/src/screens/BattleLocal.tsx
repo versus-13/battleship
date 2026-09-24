@@ -9,6 +9,7 @@ import { Journal } from "../components/Journal";
 import { Board as Engine, TOTAL_CELLS, type Ships } from "../engine/rules";
 import { LocalMatch } from "../game/localMatch";
 import type { PlacementMode } from "../game/telemetry";
+import { useI18n } from "../i18n";
 
 export function cellViews(b: Engine): CellView[] {
   const out: CellView[] = [];
@@ -16,9 +17,8 @@ export function cellViews(b: Engine): CellView[] {
   return out;
 }
 
-const HINT = "Клетки вокруг убитого корабля помечаются точками сами — как карандашом на полях.";
-
 export function BattleLocal({ ships, placement, agent, onNewGame }: { ships: Ships; placement: PlacementMode; agent: Agent; onNewGame: () => void }) {
+  const { t } = useI18n();
   const navigate = useNavigate();
   const [match, setMatch] = useState(() => new LocalMatch(ships, agent, placement));
   useEffect(() => { match.start(); return () => match.stop(); }, [match]);
@@ -33,18 +33,18 @@ export function BattleLocal({ ships, placement, agent, onNewGame }: { ships: Shi
   const myAlive = TOTAL_CELLS - s.myBoard.hit.reduce((a, v) => a + v, 0);
   const foeSunk = 10 - Object.values(s.foeBoard.alive).reduce((a, v) => a + v, 0);
 
-  const status = s.winner ? (s.winner === "you" ? "Победа" : "Поражение") : s.yourTurn ? "Ваш ход" : "Ход модели";
-  const hint = s.winner ? "партия окончена" : s.yourTurn ? "стреляйте по полю соперника" : "модель думает…";
+  const status = s.winner ? (s.winner === "you" ? t.status.win : t.status.loss) : s.yourTurn ? t.status.yourTurn : t.local.modelTurn;
+  const hint = s.winner ? t.status.over : s.yourTurn ? t.status.shoot : t.local.thinking;
 
   const restart = () => setMatch(new LocalMatch(ships, agent, placement));
 
   return (
     <>
       <section className="battle">
-        <Board caption="Мой флот" counter={`уцелело ${myAlive} из ${TOTAL_CELLS}`} cells={myCells}
+        <Board caption={t.board.mine} counter={t.board.afloat(myAlive, TOTAL_CELLS)} cells={myCells}
           ships={shipsView(s.myBoard.ships).map((v) => (s.myBoard.sunk[v.cells[0]] ? { ...v, tone: "sunk" } : v))}
           aim={s.lastFoeShot} ariaHidden />
-        <Board caption="Поле соперника" counter={`потоплено ${foeSunk} из 10`} cells={foeCells} ships={foeShips}
+        <Board caption={t.board.enemy} counter={t.board.sunk(foeSunk, 10)} cells={foeCells} ships={foeShips}
           interactive disabled={!s.yourTurn || !!s.winner || s.thinking} onShoot={(i) => match.shoot(i)} />
         <aside className="panel">
           <div className="panel__status">
@@ -55,20 +55,20 @@ export function BattleLocal({ ships, placement, agent, onNewGame }: { ships: Shi
           <FleetCounter alive={s.foeBoard.alive} />
           <div className="divider" />
           <div className="panel__buttons">
-            <button type="button" className="btn btn--block" onClick={onNewGame}>Новая игра</button>
-            <button type="button" className="btn btn--secondary btn--block" onClick={() => match.surrender()} disabled={!!s.winner}>Сдаться</button>
+            <button type="button" className="btn btn--block" onClick={onNewGame}>{t.btn.newGame}</button>
+            <button type="button" className="btn btn--secondary btn--block" onClick={() => match.surrender()} disabled={!!s.winner}>{t.btn.surrender}</button>
           </div>
         </aside>
       </section>
-      <Journal entries={s.journal} hint={HINT} foeName="Модель" />
+      <Journal entries={s.journal} hint={t.journal.hint} foeName={t.local.model} />
       {s.winner && (
         <GameOver
-          title={s.winner === "you" ? "Победа!" : "Поражение"}
+          title={s.winner === "you" ? t.status.winTitle : t.status.loss}
           text={s.winner === "you"
-            ? `Вы потопили флот модели за ${s.foeBoard.nShots} выстрелов.`
-            : s.reason === "surrender" ? "Вы сдались. Корабли модели раскрыты на её поле." : `Модель потопила ваш флот за ${s.myBoard.nShots} выстрелов.`}
-          primary="Ещё раз" onPrimary={restart}
-          secondary="На главную" onSecondary={() => navigate("/")}
+            ? t.local.youWon(s.foeBoard.nShots)
+            : s.reason === "surrender" ? t.local.surrendered : t.local.youLost(s.myBoard.nShots)}
+          primary={t.btn.again} onPrimary={restart}
+          secondary={t.btn.home} onSecondary={() => navigate("/")}
         />
       )}
     </>

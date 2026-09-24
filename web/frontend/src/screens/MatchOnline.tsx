@@ -10,6 +10,7 @@ import { Header } from "../components/Header";
 import { Journal, type JournalEntry } from "../components/Journal";
 import { FLEET, TOTAL_CELLS, randomPlacement, type Ships } from "../engine/rules";
 import type { PlacementMode } from "../game/telemetry";
+import { useI18n } from "../i18n";
 import { Placement } from "./Placement";
 
 interface View {
@@ -30,6 +31,7 @@ interface View {
   reason: string | null;
   journal: JournalEntry[];
   lastFoeShot: number | null;
+  /** server error code, translated at render */
   error: string | null;
 }
 
@@ -76,13 +78,9 @@ function groupSunk(cells: Map<number, string>): number[][] {
   return groups;
 }
 
-const ERRORS: Record<string, string> = {
-  not_your_turn: "сейчас не ваш ход", illegal_shot: "в эту клетку уже стреляли", bad_placement: "расстановка неверна",
-  wrong_phase: "сейчас нельзя", no_match: "матч не найден", not_in_match: "вы не участник этого матча",
-};
-
 export function MatchOnline() {
   const { id } = useParams();
+  const { t } = useI18n();
   const navigate = useNavigate();
   const [view, setView] = useState<View | null>(null);
   const [wsStatus, setWsStatus] = useState<WsStatus>("connecting");
@@ -137,13 +135,13 @@ export function MatchOnline() {
           };
         }
         case "game_over": return v && { ...v, phase: m.winner ? "finished" : "abandoned", youWon: m.you_won, reason: m.reason, enemyShips: m.enemy_ships, yourTurn: false, deadline: null };
-        case "error": setPlacing(false); return v && { ...v, error: ERRORS[m.code] ?? m.code };
+        case "error": setPlacing(false); return v && { ...v, error: m.code };
         default: return v;
       }
     });
   }
 
-  const foeName = view?.opponent ? displayName(view.opponent.name, view.opponent.tag) : "Соперник";
+  const foeName = view?.opponent ? displayName(view.opponent.name, view.opponent.tag) : t.journal.foe;
   const myCells = useMemo<CellView[]>(() => {
     const out: CellView[] = Array(100).fill("unknown");
     if (!view) return out;
@@ -158,13 +156,14 @@ export function MatchOnline() {
   }, [view]);
 
   if (!id) return null;
+  const errorText = view?.error ? t.errors[view.error] ?? view.error : null;
   const over = view?.phase === "finished" || view?.phase === "abandoned";
   const secondsLeft = view?.deadline ? Math.max(0, Math.round(view.deadline - now)) : null;
 
-  const header = <Header subtitle={view?.opponent ? `против ${foeName}` : "человек против человека"} />;
+  const header = <Header subtitle={view?.opponent ? t.online.vs(foeName) : t.online.h2h} />;
 
   if (!view) {
-    return <div className="page">{header}<p className="hint">{wsStatus === "closed" ? "нет связи с сервером…" : "подключаемся…"}</p></div>;
+    return <div className="page">{header}<p className="hint">{wsStatus === "closed" ? t.online.noConnection : t.online.connecting}</p></div>;
   }
 
   if (view.phase === "waiting") {
@@ -172,15 +171,15 @@ export function MatchOnline() {
     return (
       <div className="page">{header}
         <section className="home__col">
-          <span className="status">Ждём соперника</span>
-          <span className="muted">отправьте другу ссылку или код комнаты</span>
+          <span className="status">{t.status.waiting}</span>
+          <span className="muted">{t.online.sendLink}</span>
           <span className="code">{view.code}</span>
           <div className="link-row">
             <input className="field" readOnly value={link} onFocus={(e) => e.currentTarget.select()} />
-            <button type="button" className="btn btn--small" onClick={() => void navigator.clipboard?.writeText(link)}>Копировать</button>
+            <button type="button" className="btn btn--small" onClick={() => void navigator.clipboard?.writeText(link)}>{t.btn.copy}</button>
           </div>
           <div>
-            <button type="button" className="btn btn--secondary" onClick={() => { sock.current?.send({ t: "leave" }); navigate("/"); }}>Отменить</button>
+            <button type="button" className="btn btn--secondary" onClick={() => { sock.current?.send({ t: "leave" }); navigate("/"); }}>{t.btn.cancel}</button>
           </div>
         </section>
       </div>
@@ -192,8 +191,8 @@ export function MatchOnline() {
       <div className="page">{header}
         <Placement ships={ships} onChange={(s, m) => { setShips(s); setMode(m); }} busy={placing}
           onConfirm={() => { setPlacing(true); sock.current?.send({ t: "place", ships, mode }); }}
-          status="Расстановка" statusHint={secondsLeft !== null ? `осталось ${secondsLeft} с · соперник ${view.opponent?.placed ? "готов" : "расставляет"}` : undefined}
-          extra={view.error && <span className="error">{view.error}</span>} />
+          status={t.placement.status} statusHint={secondsLeft !== null ? t.online.placementHint(secondsLeft, !!view.opponent?.placed) : undefined}
+          extra={view.error && <span className="error">{errorText}</span>} />
       </div>
     );
   }
@@ -206,49 +205,41 @@ export function MatchOnline() {
     : view.sunkEnemyShips.map((cells) => ({ cells, tone: "sunk" }));
 
   const waitingOpponent = view.phase === "placing";
-  const status = over ? (view.youWon === null ? "Матч прерван" : view.youWon ? "Победа" : "Поражение")
-    : waitingOpponent ? "Ждём соперника" : view.yourTurn ? "Ваш ход" : "Ход соперника";
-  const hint = over ? "партия окончена"
-    : view.opponentLeft ? "соперник отключился, ждём возвращения…"
-    : waitingOpponent ? "соперник расставляет корабли"
-    : view.yourTurn ? `стреляйте по полю соперника${secondsLeft !== null ? ` · ${secondsLeft} с` : ""}` : "соперник целится…";
-
-  const REASONS: Record<string, string> = {
-    fleet_sunk: view.youWon ? `Вы потопили флот соперника.` : `Соперник потопил ваш флот.`,
-    forfeit: view.youWon ? "Соперник сдался." : "Вы сдались.",
-    move_timeout: view.youWon ? "Соперник не сделал ход вовремя." : "Вы не сделали ход вовремя.",
-    disconnect: view.youWon ? "Соперник не вернулся в игру." : "Вы отключились слишком надолго.",
-    abandoned: "Матч не состоялся.",
-  };
+  const status = over ? (view.youWon === null ? t.status.aborted : view.youWon ? t.status.win : t.status.loss)
+    : waitingOpponent ? t.status.waiting : view.yourTurn ? t.status.yourTurn : t.online.foeTurn;
+  const hint = over ? t.status.over
+    : view.opponentLeft ? t.online.foeLeft
+    : waitingOpponent ? t.online.foePlacing
+    : view.yourTurn ? (secondsLeft !== null ? t.online.shootTimer(secondsLeft) : t.status.shoot) : t.online.aiming;
 
   return (
     <div className="page">{header}
       <section className="battle">
-        <Board caption="Мой флот" counter={`уцелело ${myAlive} из ${TOTAL_CELLS}`} cells={myCells} ships={myShipViews} aim={view.lastFoeShot} ariaHidden />
-        <Board caption="Поле соперника" counter={`потоплено ${foeSunk} из 10`} cells={foeCells} ships={foeShipViews}
+        <Board caption={t.board.mine} counter={t.board.afloat(myAlive, TOTAL_CELLS)} cells={myCells} ships={myShipViews} aim={view.lastFoeShot} ariaHidden />
+        <Board caption={t.board.enemy} counter={t.board.sunk(foeSunk, 10)} cells={foeCells} ships={foeShipViews}
           interactive disabled={!view.yourTurn || over || wsStatus !== "open"} dim={waitingOpponent}
           onShoot={(i) => sock.current?.send({ t: "shoot", cell: i })} />
         <aside className="panel">
           <div className="panel__status">
             <span className="status">{status}</span>
             <span className="muted">{hint}</span>
-            {view.error && <span className="error">{view.error}</span>}
-            {wsStatus !== "open" && <span className="error">связь потеряна, переподключаемся…</span>}
+            {view.error && <span className="error">{errorText}</span>}
+            {wsStatus !== "open" && <span className="error">{t.online.reconnecting}</span>}
           </div>
           <div className="divider" />
           <FleetCounter alive={view.enemyAlive} />
           <div className="divider" />
           <div className="panel__buttons">
-            <button type="button" className="btn btn--block" onClick={() => navigate("/")}>На главную</button>
-            <button type="button" className="btn btn--secondary btn--block" disabled={over} onClick={() => sock.current?.send({ t: "leave" })}>Сдаться</button>
+            <button type="button" className="btn btn--block" onClick={() => navigate("/")}>{t.btn.home}</button>
+            <button type="button" className="btn btn--secondary btn--block" disabled={over} onClick={() => sock.current?.send({ t: "leave" })}>{t.btn.surrender}</button>
           </div>
         </aside>
       </section>
-      <Journal entries={view.journal} foeName={foeName} hint="Клетки вокруг убитого корабля помечаются точками сами — как карандашом на полях." />
+      <Journal entries={view.journal} foeName={foeName} hint={t.journal.hint} />
       {over && (
-        <GameOver title={view.youWon === null ? "Матч прерван" : view.youWon ? "Победа!" : "Поражение"}
-          text={REASONS[view.reason ?? ""] ?? ""}
-          primary="На главную" onPrimary={() => navigate("/")} />
+        <GameOver title={view.youWon === null ? t.status.aborted : view.youWon ? t.status.winTitle : t.status.loss}
+          text={t.online.reason(view.reason ?? "", view.youWon)}
+          primary={t.btn.home} onPrimary={() => navigate("/")} />
       )}
     </div>
   );
