@@ -1,5 +1,6 @@
 # Production on a VPS: prebuilt images from GHCR (built by GitHub Actions on push to master).
-# Put it at /opt/battleship/docker-compose.yml next to .env (POSTGRES_PASSWORD).
+# Put it at /opt/battleship/docker-compose.yml next to .env (POSTGRES_PASSWORD) and
+# moderation/{stoplist,allowlist}.txt (name filters, see the api service).
 # Update: docker compose pull && docker compose up -d
 # Ports are bound to localhost only; the reverse proxy with TLS is external (see web/README.md).
 #
@@ -39,6 +40,22 @@ services:
     environment:
       BS_DATABASE_URL: postgresql+asyncpg://battleship:${POSTGRES_PASSWORD}@db:5432/battleship
       BS_CORS_ORIGINS: '[]'
+    # Name filters live on the host (./moderation/*.txt next to this file) so they can be
+    # edited without publishing them; they cover the copies baked into the image.
+    # create_host_path: false — a missing file fails the start instead of silently turning
+    # the filter off. Files must be readable by APP_UID (0644). Read once at startup:
+    # after editing, docker compose restart api
+    volumes:
+      - type: bind
+        source: ./moderation/stoplist.txt
+        target: /srv/app/data/stoplist.txt
+        read_only: true
+        bind: { create_host_path: false }
+      - type: bind
+        source: ./moderation/allowlist.txt
+        target: /srv/app/data/allowlist.txt
+        read_only: true
+        bind: { create_host_path: false }
     ports:
       - "127.0.0.1:8000:8000"
     depends_on:

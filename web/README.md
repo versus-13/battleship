@@ -83,6 +83,12 @@ echo "POSTGRES_PASSWORD=$(openssl rand -hex 24)" > .env
 # host user — especially not one in the docker group, which is root-equivalent.
 # echo -e "APP_UID=10001\nAPP_GID=10001" >> .env
 
+# name filters live on the host only (see "Name moderation"); the repository copies are a
+# starting point. api refuses to start while these files are missing.
+mkdir -p moderation && for f in stoplist allowlist; do
+  curl -fsSL -o moderation/$f.txt https://raw.githubusercontent.com/versus-13/battleship/master/web/server/app/data/$f.txt
+done && chmod 755 moderation && chmod 644 moderation/*.txt
+
 # 3. containers (migrations run when api starts)
 docker compose pull && docker compose up -d
 curl -s localhost:8000/healthz        # {"ok":true,...}
@@ -173,3 +179,9 @@ Analysis: `cd model && python -m battleship.analyze --logs logs.jsonl --ckpt bat
 substring) and `data/allowlist.txt` for false positives. Normalization strips case,
 homoglyphs, digit-letters, separators and repeats. Rejected names are not stored, only
 a counter of reasons in `name_rejects`.
+
+In production the lists come from the host, `/opt/battleship/moderation/*.txt`, bind-mounted
+read-only over the copies in the image, so they are edited without being published. The
+repository copies serve the tests and local runs. The lists are read once at startup: after
+editing, run `docker compose restart api` (this aborts H2H matches in progress).
+Names that are already saved are not re-checked.
