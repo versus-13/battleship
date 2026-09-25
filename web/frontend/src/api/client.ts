@@ -12,7 +12,7 @@ export interface Stats {
   h2h_games: number; h2m_games: number; h2h_wins: number;
 }
 export interface Me { player_id: string; name: string | null; tag: string; stats: Stats | null }
-export interface LeaderRow { player_id: string; name: string | null; tag: string; games: number; wins: number; win_rate: number; avg_shots: number }
+export interface LeaderRow { player_id: string; name: string | null; tag: string; games: number; wins: number; win_rate: number; avg_shots: number | null }
 export interface ModelInfo { version: string; url: string }
 
 let identity: Identity | null = loadIdentity();

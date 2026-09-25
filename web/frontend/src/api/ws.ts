@@ -8,11 +8,18 @@ export interface StateMsg {
   match_id: string;
   code: string | null;
   phase: "waiting" | "placing" | "playing" | "finished" | "abandoned";
-  you: { placed: boolean; ships?: number[][]; hits?: number[]; revealed?: number[] };
+  you: { placed: boolean; ships?: number[][]; hits?: number[]; revealed?: number[]; reconnect_left_s: number };
   enemy: { placed: boolean; cells: Record<string, CellState>; alive: Record<string, number> | null };
   your_turn: boolean;
-  opponent: { name: string | null; tag: string; connected: boolean; placed: boolean } | null;
+  /** reconnect_deadline_ts: the opponent is reconnecting until then; null — online or out of budget */
+  opponent: { name: string | null; tag: string; connected: boolean; placed: boolean; reconnect_deadline_ts: number | null } | null;
   deadline_ts: number | null;
+  move_s: number;
+  /** moves in a row made by the server for us when the timer ran out; idle_limit of them — a loss */
+  auto_streak: number;
+  idle_limit: number;
+  /** the opponent left early: the race is won, we may finish clearing the board */
+  solo: boolean;
   winner: string | null;
   you_won: boolean | null;
   end_reason: string | null;
@@ -22,15 +29,18 @@ export interface StateMsg {
 export interface ShotMsg {
   t: "shot_result" | "opponent_shot";
   cell: number; result: 0 | 1 | 2; sunk_cells: number[]; revealed: number[];
-  your_turn: boolean; alive: Record<string, number>; deadline_ts?: number;
+  your_turn: boolean; alive: Record<string, number>; deadline_ts?: number | null;
+  /** the server shot for the shooter: the move timer ran out */
+  auto: boolean; auto_streak: number;
 }
 
 export type ServerMsg =
   | StateMsg | ShotMsg
   | { t: "opponent_joined"; name: string | null; tag: string }
-  | { t: "opponent_ready" } | { t: "opponent_left"; grace_s: number } | { t: "opponent_back" }
+  | { t: "opponent_ready" } | { t: "opponent_left"; grace_s: number; reconnect_deadline_ts: number | null } | { t: "opponent_back" }
   | { t: "placed" } | { t: "start"; your_turn: boolean; deadline_ts: number }
-  | { t: "game_over"; winner: string | null; you_won: boolean | null; reason: string; enemy_ships: number[][] | null }
+  | { t: "game_over"; winner: string | null; you_won: boolean | null; reason: string; enemy_ships: number[][] | null;
+      solo: boolean; n_shots?: number; cleared?: boolean }
   | { t: "error"; code: string; msg?: string } | { t: "pong" };
 
 export type WsStatus = "connecting" | "open" | "closed";

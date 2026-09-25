@@ -26,9 +26,17 @@ interface View {
   yourTurn: boolean;
   opponent: StateMsg["opponent"];
   opponentLeft: boolean;
+  /** the opponent is reconnecting until then (server clock); null — online or out of budget */
+  foeReconnectUntil: number | null;
   deadline: number | null;
+  autoStreak: number;
+  idleLimit: number;
+  /** the race is won by a walk-out; the board may still be cleared */
+  solo: boolean;
   youWon: boolean | null;
   reason: string | null;
+  /** at the very end: our shots and whether we cleared the board */
+  result: { nShots: number; cleared: boolean } | null;
   journal: JournalEntry[];
   lastFoeShot: number | null;
   /** server error code, translated at render */
@@ -49,7 +57,9 @@ function fromState(m: StateMsg, prev?: View): View {
     sunkEnemyShips: groupSunk(enemyCells),
     enemyShips: m.enemy_ships, yourTurn: m.your_turn, opponent: m.opponent,
     opponentLeft: m.opponent ? !m.opponent.connected : false,
-    deadline: m.deadline_ts, youWon: m.you_won, reason: m.end_reason,
+    foeReconnectUntil: m.opponent?.reconnect_deadline_ts ?? null,
+    deadline: m.deadline_ts, autoStreak: m.auto_streak, idleLimit: m.idle_limit, solo: m.solo,
+    youWon: m.you_won, reason: m.end_reason, result: prev?.result ?? null,
     journal: prev?.journal ?? [], lastFoeShot: prev?.lastFoeShot ?? null, error: null,
   };
 }
@@ -88,6 +98,8 @@ export function MatchOnline() {
   const [mode, setMode] = useState<PlacementMode>("random");
   const [placing, setPlacing] = useState(false);
   const [now, setNow] = useState(Date.now() / 1000);
+  /** the player chose to finish clearing the board — the overlay is hidden until the end */
+  const [clearing, setClearing] = useState(false);
   const sock = useRef<MatchSocket | null>(null);
   const shipsRef = useRef(ships);
   shipsRef.current = ships;
@@ -106,10 +118,10 @@ export function MatchOnline() {
       switch (m.t) {
         case "state": return fromState(m, v ?? undefined);
         case "placed": setPlacing(false); return v && { ...v, myShips: shipsRef.current };
-        case "opponent_joined": return v && { ...v, phase: "placing", opponent: { name: m.name, tag: m.tag, connected: true, placed: false } };
+        case "opponent_joined": return v && { ...v, phase: "placing", opponent: { name: m.name, tag: m.tag, connected: true, placed: false, reconnect_deadline_ts: null } };
         case "opponent_ready": return v && { ...v, opponent: v.opponent && { ...v.opponent, placed: true } };
-        case "opponent_left": return v && { ...v, opponentLeft: true };
-        case "opponent_back": return v && { ...v, opponentLeft: false };
+        case "opponent_left": return v && { ...v, opponentLeft: true, foeReconnectUntil: m.reconnect_deadline_ts };
+        case "opponent_back": return v && { ...v, opponentLeft: false, foeReconnectUntil: null };
         case "start": return v && { ...v, phase: "playing", yourTurn: m.your_turn, deadline: m.deadline_ts };
         case "shot_result": {
           if (!v) return v;
@@ -120,8 +132,8 @@ export function MatchOnline() {
           return {
             ...v, enemyCells, sunkEnemyShips: m.result === 2 ? [...v.sunkEnemyShips, m.sunk_cells] : v.sunkEnemyShips,
             enemyAlive: Object.fromEntries(Object.entries(m.alive).map(([k, x]) => [Number(k), x])),
-            yourTurn: m.your_turn, deadline: m.deadline_ts ?? v.deadline,
-            journal: [...v.journal, { who: "you", cell: m.cell, result: m.result }],
+            yourTurn: m.your_turn, deadline: m.deadline_ts === undefined ? v.deadline : m.deadline_ts, autoStreak: m.auto_streak,
+            journal: [...v.journal, { who: "you", cell: m.cell, result: m.result, auto: m.auto }],
           };
         }
         case "opponent_shot": {
@@ -130,11 +142,17 @@ export function MatchOnline() {
           if (m.result > 0) hitsOnMe.add(m.cell); else revealedOnMe.add(m.cell);
           m.revealed.forEach((c) => revealedOnMe.add(c));
           return {
-            ...v, hitsOnMe, revealedOnMe, yourTurn: m.your_turn, deadline: m.deadline_ts ?? v.deadline, lastFoeShot: m.cell,
-            journal: [...v.journal, { who: "foe", cell: m.cell, result: m.result }],
+            ...v, hitsOnMe, revealedOnMe, yourTurn: m.your_turn, deadline: m.deadline_ts === undefined ? v.deadline : m.deadline_ts, lastFoeShot: m.cell,
+            journal: [...v.journal, { who: "foe", cell: m.cell, result: m.result, auto: m.auto }],
           };
         }
-        case "game_over": return v && { ...v, phase: m.winner ? "finished" : "abandoned", youWon: m.you_won, reason: m.reason, enemyShips: m.enemy_ships, yourTurn: false, deadline: null };
+        case "game_over":
+          if (!m.solo) setClearing(false);
+          return v && {
+            ...v, phase: m.winner ? "finished" : "abandoned", youWon: m.you_won, reason: m.reason, enemyShips: m.enemy_ships,
+            yourTurn: m.solo, deadline: null, solo: m.solo,
+            result: m.solo || m.n_shots === undefined ? null : { nShots: m.n_shots, cleared: !!m.cleared },
+          };
         case "error": setPlacing(false); return v && { ...v, error: m.code };
         default: return v;
       }
@@ -159,6 +177,7 @@ export function MatchOnline() {
   const errorText = view?.error ? t.errors[view.error] ?? view.error : null;
   const over = view?.phase === "finished" || view?.phase === "abandoned";
   const secondsLeft = view?.deadline ? Math.max(0, Math.round(view.deadline - now)) : null;
+  const foeReconnectLeft = view?.foeReconnectUntil ? Math.max(0, Math.round(view.foeReconnectUntil - now)) : null;
 
   const header = <Header subtitle={view?.opponent ? t.online.vs(foeName) : t.online.h2h} />;
 
@@ -205,24 +224,34 @@ export function MatchOnline() {
     : view.sunkEnemyShips.map((cells) => ({ cells, tone: "sunk" }));
 
   const waitingOpponent = view.phase === "placing";
-  const status = over ? (view.youWon === null ? t.status.aborted : view.youWon ? t.status.win : t.status.loss)
+  const foeAway = view.opponentLeft
+    ? (foeReconnectLeft ? t.online.foeReconnecting(foeReconnectLeft) : t.online.foeAway)
+    : null;
+  const status = view.solo ? t.online.soloStatus
+    : over ? (view.youWon === null ? t.status.aborted : view.youWon ? t.status.win : t.status.loss)
     : waitingOpponent ? t.status.waiting : view.yourTurn ? t.status.yourTurn : t.online.foeTurn;
-  const hint = over ? t.status.over
-    : view.opponentLeft ? t.online.foeLeft
-    : waitingOpponent ? t.online.foePlacing
-    : view.yourTurn ? (secondsLeft !== null ? t.online.shootTimer(secondsLeft) : t.status.shoot) : t.online.aiming;
+  const hint = view.solo ? t.online.soloHint
+    : over ? t.status.over
+    : waitingOpponent ? (foeAway ?? t.online.foePlacing)
+    : view.yourTurn ? (secondsLeft !== null ? t.online.shootTimer(secondsLeft) : t.status.shoot)
+    : foeAway ?? (secondsLeft !== null ? t.online.aimingTimer(secondsLeft) : t.online.aiming);
+  // the server shot for us: warn before the idle limit turns into a loss
+  const autoWarning = !over && view.autoStreak > 0 ? t.online.autoWarning(view.autoStreak, view.idleLimit) : null;
+  const goHome = () => { if (view.solo) sock.current?.send({ t: "leave" }); navigate("/"); };
 
   return (
     <div className="page">{header}
       <section className="battle">
         <Board caption={t.board.mine} counter={t.board.afloat(myAlive, TOTAL_CELLS)} cells={myCells} ships={myShipViews} aim={view.lastFoeShot} ariaHidden />
         <Board caption={t.board.enemy} counter={t.board.sunk(foeSunk, 10)} cells={foeCells} ships={foeShipViews}
-          interactive disabled={!view.yourTurn || over || wsStatus !== "open"} dim={waitingOpponent}
+          interactive disabled={!view.yourTurn || (over && !view.solo) || wsStatus !== "open"} dim={waitingOpponent}
           onShoot={(i) => sock.current?.send({ t: "shoot", cell: i })} />
         <aside className="panel">
           <div className="panel__status">
             <span className="status">{status}</span>
             <span className="muted">{hint}</span>
+            {foeAway && !over && hint !== foeAway && <span className="muted">{foeAway}</span>}
+            {autoWarning && <span className="error">{autoWarning}</span>}
             {view.error && <span className="error">{errorText}</span>}
             {wsStatus !== "open" && <span className="error">{t.online.reconnecting}</span>}
           </div>
@@ -230,16 +259,23 @@ export function MatchOnline() {
           <FleetCounter alive={view.enemyAlive} />
           <div className="divider" />
           <div className="panel__buttons">
-            <button type="button" className="btn btn--block" onClick={() => navigate("/")}>{t.btn.home}</button>
-            <button type="button" className="btn btn--secondary btn--block" disabled={over} onClick={() => sock.current?.send({ t: "leave" })}>{t.btn.surrender}</button>
+            <button type="button" className="btn btn--block" onClick={goHome}>{t.btn.home}</button>
+            {view.solo
+              ? <button type="button" className="btn btn--secondary btn--block" onClick={() => sock.current?.send({ t: "leave" })}>{t.btn.stopClearing}</button>
+              : <button type="button" className="btn btn--secondary btn--block" disabled={over} onClick={() => sock.current?.send({ t: "leave" })}>{t.btn.surrender}</button>}
           </div>
         </aside>
       </section>
       <Journal entries={view.journal} foeName={foeName} hint={t.journal.hint} />
-      {over && (
+      {over && !clearing && (
         <GameOver title={view.youWon === null ? t.status.aborted : view.youWon ? t.status.winTitle : t.status.loss}
-          text={t.online.reason(view.reason ?? "", view.youWon)}
-          primary={t.btn.home} onPrimary={() => navigate("/")} />
+          text={[
+            t.online.reason(view.reason ?? "", view.youWon, view.idleLimit),
+            view.solo ? t.online.soloOffer : view.result?.cleared && view.reason !== "fleet_sunk" ? t.online.cleared(view.result.nShots) : "",
+          ].filter(Boolean).join(" ")}
+          {...(view.solo
+            ? { primary: t.btn.clear, onPrimary: () => setClearing(true), secondary: t.btn.home, onSecondary: goHome }
+            : { primary: t.btn.home, onPrimary: () => navigate("/") })} />
       )}
     </div>
   );

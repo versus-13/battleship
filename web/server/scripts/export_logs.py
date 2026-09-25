@@ -14,7 +14,7 @@ import json
 from sqlalchemy import select
 
 from app.db import SessionLocal
-from app.models import GameLog
+from app.models import GameLog, Match
 from app.rules import FLEET, N
 
 # a mirror of telemetry.rules_to_dict(Rules()) — the server does not import model/
@@ -41,7 +41,25 @@ def tag(pid) -> str:
     return pid.hex[:4]
 
 
-def row_to_gamelog(row: GameLog) -> dict:
+RESIGNED = ("resigned", "forfeit")     # forfeit — the old name of resigned
+
+
+def outcome_of(row: GameLog, end_reason: str | None) -> str:
+    """
+    finished — the board was cleared (the "shots to clear" metric applies);
+    lost — played to the end but the opponent cleared first;
+    resigned — pressed "surrender"; abandoned — not finished (left, idle, disconnected).
+    """
+    if row.fleet_cleared:
+        return "finished"
+    if row.won is False and end_reason in RESIGNED:
+        return "resigned"
+    if row.won is False and end_reason in (None, "fleet_sunk"):
+        return "lost"
+    return "abandoned"
+
+
+def row_to_gamelog(row: GameLog, end_reason: str | None = None) -> dict:
     if row.attacker_kind == "player":
         shooter = f"human:{tag(row.attacker_player)}"
     else:
@@ -49,6 +67,8 @@ def row_to_gamelog(row: GameLog) -> dict:
     placer = f"human:{tag(row.defender_player)}" if row.defender_player else "generator:client"
     client = dict(row.client_info or {})
     client.update({"client": row.client, "client_version": row.client_version, "mode": row.mode})
+    if end_reason is not None:
+        client["end_reason"] = end_reason
     return {
         "game_id": str(row.id),
         "rules": row.rules or RULES_RU,
@@ -56,9 +76,7 @@ def row_to_gamelog(row: GameLog) -> dict:
         "shots": list(row.shots),
         "shooter": shooter,
         "placer": placer,
-        # finished — the board was cleared (the "shots to clear" metric applies);
-        # lost — played to the end but the opponent cleared first; abandoned — not finished
-        "outcome": "finished" if row.fleet_cleared else ("lost" if row.won is not None else "abandoned"),
+        "outcome": outcome_of(row, end_reason),
         "match_id": str(row.match_id) if row.match_id else None,
         "started_at": row.started_at.timestamp() if row.started_at else row.created_at.timestamp(),
         "think_ms": list(row.think_ms) if row.think_ms is not None else None,
@@ -75,7 +93,7 @@ async def main():
     ap.add_argument("--all", action="store_true")
     args = ap.parse_args()
 
-    q = select(GameLog).order_by(GameLog.id)
+    q = select(GameLog, Match.end_reason).outerjoin(Match, Match.id == GameLog.match_id).order_by(GameLog.id)
     if not args.all:
         q = q.where(GameLog.fleet_cleared)
     if args.mode:
@@ -85,10 +103,10 @@ async def main():
 
     n = 0
     async with SessionLocal() as session:
-        rows = (await session.scalars(q)).all()
+        rows = (await session.execute(q)).all()
     with open(args.out, "w") as f:
-        for row in rows:
-            f.write(json.dumps(row_to_gamelog(row), ensure_ascii=False, separators=(",", ":")) + "\n")
+        for row, end_reason in rows:
+            f.write(json.dumps(row_to_gamelog(row, end_reason), ensure_ascii=False, separators=(",", ":")) + "\n")
             n += 1
     print(f"{args.out}: {n} логов")
 

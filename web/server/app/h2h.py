@@ -2,6 +2,17 @@
 A human-vs-human match. The server is the sole referee: it holds both boards,
 validates shots, tracks whose turn it is and writes the logs to the DB at the end.
 Lives in the memory of a single process (uvicorn --workers 1).
+
+Time rules (all clocks are here, the client only displays them):
+* move timer (move_s): when it runs out, a random shot is made for the player —
+  no forfeit, the idle player simply plays worse. idle_moves_limit auto-moves in a
+  row end the match: the player is gone.
+* reconnect budget (reconnect_budget_s) per player per match, spent while offline.
+  While it lasts, the offline player's move timer waits. Once it is spent, auto-moves
+  go on as usual, and disconnect_after_budget_s more offline ends the match.
+* a match left early (resigned / idle / disconnect) is a loss for the leaver; the
+  winner may finish clearing the static board ("solo") so their shots-to-clear counts.
+  The logs are written when the solo ends.
 """
 from __future__ import annotations
 
@@ -17,11 +28,13 @@ from fastapi import WebSocket
 
 from .config import settings
 from .models import GameLog, Match as MatchRow
-from .rules import EXTRA_TURN_ON_HIT, Board, IllegalShot, PlacementError, validate_placement
+from .rules import EXTRA_TURN_ON_HIT, N, Board, IllegalShot, PlacementError, validate_placement
 
 log = logging.getLogger("h2h")
 
 WAITING, PLACING, PLAYING, FINISHED, ABANDONED = "waiting", "placing", "playing", "finished", "abandoned"
+# end reasons: fleet_sunk | resigned | idle | disconnect | abandoned
+LEFT_EARLY = ("resigned", "idle", "disconnect")
 
 
 class Match:
@@ -30,25 +43,33 @@ class Match:
         self.id = uuid.uuid4()
         self.kind = kind
         self.code = code
-        self.players: List[uuid.UUID] = [host]
+        self.players: List[uuid.UUID] = []
         self.names: Dict[uuid.UUID, tuple[Optional[str], str]] = {}
         self.status = WAITING
         self.boards: Dict[uuid.UUID, Board] = {}        # the player's board (the opponent shoots at it)
         self.shots: Dict[uuid.UUID, List[int]] = {}     # the player's shots
         self.think_ms: Dict[uuid.UUID, List[int]] = {}  # time per shot
         self.placement_mode: Dict[uuid.UUID, str] = {}  # random | manual
+        self.auto_moves: Dict[uuid.UUID, List[int]] = {}  # indices into shots made by the move timer
+        self.auto_streak: Dict[uuid.UUID, int] = {}
+        self.budget_left: Dict[uuid.UUID, float] = {}   # reconnect budget, s (as of the last reconnect)
+        self.offline_since: Dict[uuid.UUID, float] = {}  # only while the offline clock runs
         self._turn_since: float = 0.0                    # when the current turn became available
-        self.sockets: Dict[uuid.UUID, Optional[WebSocket]] = {host: None}
+        self._move_left: Optional[float] = None          # the move timer is paused with this much left
+        self.sockets: Dict[uuid.UUID, Optional[WebSocket]] = {}
         self.turn: Optional[uuid.UUID] = None
         self.winner: Optional[uuid.UUID] = None
         self.end_reason: Optional[str] = None
+        self.solo: Optional[uuid.UUID] = None            # the winner finishing the board
         self.created_at = datetime.now(timezone.utc)
         self.started_at: Optional[datetime] = None
         self.finished_at: Optional[datetime] = None
         self.deadline_ts: Optional[float] = None
         self._timer: Optional[asyncio.Task] = None
         self._dc_timers: Dict[uuid.UUID, asyncio.Task] = {}
+        self._saved = False
         self._on_finish = on_finish
+        self._add_player(host)
         self._arm(settings.room_wait_s, self._expire_waiting)
 
     # ---- helpers ----
@@ -65,10 +86,14 @@ class Match:
     def has(self, pid: uuid.UUID) -> bool:
         return pid in self.players
 
-    def _arm(self, seconds: float, cb: Callable[[], Awaitable[None]]):
-        self._disarm()
-        self.deadline_ts = time.time() + seconds
+    def _add_player(self, pid: uuid.UUID):
+        self.players.append(pid)
+        self.sockets[pid] = None
+        self.auto_streak[pid] = 0
+        self.auto_moves[pid] = []
+        self.budget_left[pid] = float(settings.reconnect_budget_s)
 
+    def _later(self, seconds: float, cb: Callable[[], Awaitable[None]]) -> asyncio.Task:
         async def fire():
             await asyncio.sleep(seconds)
             try:
@@ -76,7 +101,12 @@ class Match:
             except Exception:
                 log.exception("таймер матча %s", self.id)
 
-        self._timer = asyncio.create_task(fire())
+        return asyncio.create_task(fire())
+
+    def _arm(self, seconds: float, cb: Callable[[], Awaitable[None]]):
+        self._disarm()
+        self.deadline_ts = time.time() + seconds
+        self._timer = self._later(seconds, cb)
 
     @staticmethod
     def _cancel(task: Optional[asyncio.Task]):
@@ -91,6 +121,7 @@ class Match:
 
     def _disarm_all(self):
         self._disarm()
+        self._move_left = None
         for t in self._dc_timers.values():
             self._cancel(t)
         self._dc_timers.clear()
@@ -108,12 +139,63 @@ class Match:
         for p in self.players:
             await self._send(p, msg)
 
+    # ---- reconnect budget ----
+    def _budget_now(self, pid: uuid.UUID) -> float:
+        left = self.budget_left.get(pid, 0.0)
+        since = self.offline_since.get(pid)
+        if since is not None:
+            left -= time.time() - since
+        return max(0.0, left)
+
+    def _reconnecting(self, pid: uuid.UUID) -> bool:
+        """Offline with budget left: the player's move timer waits."""
+        return self.sockets.get(pid) is None and pid in self.offline_since and self._budget_now(pid) > 0
+
+    def _start_offline_clock(self, pid: uuid.UUID):
+        self.offline_since[pid] = time.time()
+        self._cancel(self._dc_timers.pop(pid, None))
+        if self.budget_left[pid] > 0:
+            self._dc_timers[pid] = self._later(self.budget_left[pid], lambda: self._budget_spent(pid))
+        else:
+            self._dc_timers[pid] = self._later(settings.disconnect_after_budget_s, lambda: self._gone(pid))
+
+    async def _budget_spent(self, pid: uuid.UUID):
+        self._dc_timers.pop(pid, None)
+        if not self.active or self.sockets.get(pid) is not None:
+            return
+        self.budget_left[pid] = 0.0
+        self.offline_since[pid] = time.time()
+        if self.status == PLACING:
+            await self._forfeit(pid, "disconnect")
+            return
+        self._dc_timers[pid] = self._later(settings.disconnect_after_budget_s, lambda: self._gone(pid))
+        if self.status == PLAYING and self.turn == pid and self._move_left is not None:
+            self._arm_move(self._move_left)      # auto-moves from now on
+        opp = self.opponent(pid)
+        if opp is not None:
+            await self._send(opp, self.snapshot(opp))
+
+    async def _gone(self, pid: uuid.UUID):
+        self._dc_timers.pop(pid, None)
+        if self.active and self.sockets.get(pid) is None:
+            await self._forfeit(pid, "disconnect")
+
+    # ---- move timer ----
+    def _arm_move(self, seconds: Optional[float] = None):
+        seconds = settings.move_s if seconds is None else seconds
+        if self.turn is not None and self._reconnecting(self.turn):
+            self._disarm()
+            self._move_left = seconds
+            return
+        self._move_left = None
+        self._arm(seconds, self._expire_move)
+
     # ---- snapshot ----
     def snapshot(self, pid: uuid.UUID) -> dict:
         opp = self.opponent(pid)
         mine = self.boards.get(pid)
         theirs = self.boards.get(opp) if opp else None
-        you: Dict[str, Any] = {"placed": mine is not None}
+        you: Dict[str, Any] = {"placed": mine is not None, "reconnect_left_s": round(self._budget_now(pid), 1)}
         if mine is not None:
             you.update(mine.owner_view())
         enemy: Dict[str, Any] = {"placed": theirs is not None, "cells": {}, "alive": None}
@@ -124,23 +206,30 @@ class Match:
         if opp is not None:
             name, tag = self.names.get(opp, (None, opp.hex[:4]))
             opponent = {"name": name, "tag": tag, "connected": self.sockets.get(opp) is not None,
-                        "placed": theirs is not None}
-        snap = {
+                        "placed": theirs is not None,
+                        # the opponent is reconnecting until then; None — online or the budget is spent
+                        "reconnect_deadline_ts": (time.time() + self._budget_now(opp))
+                        if self.active and self._reconnecting(opp) else None}
+        solo = self.solo == pid
+        return {
             "t": "state",
             "match_id": str(self.id),
             "code": self.code,
             "phase": self.status,
             "you": you,
             "enemy": enemy,
-            "your_turn": self.status == PLAYING and self.turn == pid,
+            "your_turn": (self.status == PLAYING and self.turn == pid) or solo,
             "opponent": opponent,
-            "deadline_ts": self.deadline_ts,
+            "deadline_ts": self.deadline_ts if self.active else None,
+            "move_s": settings.move_s,
+            "auto_streak": self.auto_streak.get(pid, 0),
+            "idle_limit": settings.idle_moves_limit,
             "winner": str(self.winner) if self.winner else None,
             "you_won": (self.winner == pid) if self.winner else None,
             "end_reason": self.end_reason,
-            "enemy_ships": theirs.ships if (theirs is not None and not self.active) else None,
+            "solo": solo,
+            "enemy_ships": theirs.ships if (theirs is not None and not self.active and not solo) else None,
         }
-        return snap
 
     # ---- events ----
     def join(self, pid: uuid.UUID, name: Optional[str], tag: str) -> bool:
@@ -150,10 +239,13 @@ class Match:
             return True
         if len(self.players) >= 2 or self.status != WAITING:
             return False
-        self.players.append(pid)
-        self.sockets[pid] = None
+        self._add_player(pid)
         self.status = PLACING
         self._arm(settings.placing_s, self._expire_placing)
+        # from here on offline time is spent from the budget — including never connecting at all
+        for p in self.players:
+            if self.sockets[p] is None:
+                self._start_offline_clock(p)
         return True
 
     async def announce_join(self, pid: uuid.UUID):
@@ -167,6 +259,8 @@ class Match:
         self.names[pid] = (name, tag)
         old = self.sockets.get(pid)
         was_disconnected = old is None
+        if was_disconnected:
+            self.budget_left[pid] = self._budget_now(pid)
         self.sockets[pid] = ws
         if old is not None and old is not ws:
             try:
@@ -174,11 +268,17 @@ class Match:
             except Exception:
                 pass
         self._cancel(self._dc_timers.pop(pid, None))
+        since = self.offline_since.pop(pid, None)
         if self.status == WAITING and was_disconnected:
             self._arm(settings.room_wait_s, self._expire_waiting)
+        if self.status == PLAYING and self.turn == pid and self._move_left is not None:
+            # the paused turn resumes; the time offline is not the player's think time
+            if since is not None:
+                self._turn_since += time.time() - since
+            self._arm_move(max(self._move_left, min(10.0, settings.move_s)))
         await self._send(pid, self.snapshot(pid))
         opp = self.opponent(pid)
-        if opp is not None and was_disconnected:
+        if opp is not None and was_disconnected and self.active:
             await self._send(opp, {"t": "opponent_back"})
             await self._send(opp, self.snapshot(opp))
 
@@ -187,22 +287,19 @@ class Match:
             return
         self.sockets[pid] = None
         if not self.active:
-            return
+            return                    # a solo is bounded by its idle timer
         if self.status == WAITING:
             self._arm(settings.disconnect_grace_s, self._expire_waiting)
             return
-
-        async def fire():
-            await asyncio.sleep(settings.disconnect_grace_s)
-            self._dc_timers.pop(pid, None)
-            if self.sockets.get(pid) is None:
-                await self._forfeit(pid, "disconnect")
-
-        self._cancel(self._dc_timers.pop(pid, None))
-        self._dc_timers[pid] = asyncio.create_task(fire())
+        self._start_offline_clock(pid)
+        if self.status == PLAYING and self.turn == pid and self.deadline_ts is not None:
+            self._arm_move(max(0.0, self.deadline_ts - time.time()))   # pauses while the budget lasts
         opp = self.opponent(pid)
         if opp is not None:
-            await self._send(opp, {"t": "opponent_left", "grace_s": settings.disconnect_grace_s})
+            left = self._budget_now(pid)
+            await self._send(opp, {"t": "opponent_left", "grace_s": round(left),
+                                   "reconnect_deadline_ts": time.time() + left if left > 0 else None})
+            await self._send(opp, self.snapshot(opp))
 
     async def place(self, pid: uuid.UUID, ships, mode: Any = None) -> Optional[str]:
         if self.status != PLACING:
@@ -230,48 +327,93 @@ class Match:
         self.started_at = datetime.now(timezone.utc)
         self.turn = random.choice(self.players)
         self._turn_since = time.time()
-        self._arm(settings.move_s, self._expire_move)
+        self._arm_move()
         for p in self.players:
             await self._send(p, {"t": "start", "your_turn": self.turn == p, "deadline_ts": self.deadline_ts})
 
     async def shoot(self, pid: uuid.UUID, cell) -> Optional[str]:
+        if self.status == FINISHED and self.solo == pid:
+            return await self._solo_shot(pid, cell)
         if self.status != PLAYING:
             return "wrong_phase"
         if self.turn != pid:
             return "not_your_turn"
-        opp = self.opponent(pid)
         try:
-            outcome = self.boards[opp].shoot(int(cell))
+            cell = int(cell)
+        except (TypeError, ValueError):
+            return "illegal_shot"
+        return await self._shot(pid, cell, auto=False)
+
+    async def _shot(self, pid: uuid.UUID, cell: int, auto: bool) -> Optional[str]:
+        opp = self.opponent(pid)
+        board = self.boards[opp]
+        try:
+            outcome = board.shoot(cell)
+        except IllegalShot:
+            return "illegal_shot"
+        self.shots[pid].append(cell)
+        now = time.time()
+        self.think_ms[pid].append(int((now - self._turn_since) * 1000))
+        self._turn_since = now
+        if auto:
+            self.auto_moves[pid].append(len(self.shots[pid]) - 1)
+            self.auto_streak[pid] += 1
+        else:
+            self.auto_streak[pid] = 0
+        payload = {"cell": cell, "result": outcome.result, "sunk_cells": outcome.sunk_cells,
+                   "revealed": outcome.revealed, "alive": board.alive,
+                   "auto": auto, "auto_streak": self.auto_streak[pid]}
+        if board.done:
+            payload.update(your_turn=False, deadline_ts=None)
+            await self._send(pid, {"t": "shot_result", **payload})
+            await self._send(opp, {"t": "opponent_shot", **payload})
+            await self._finish(pid, "fleet_sunk")
+            return None
+        idle = auto and self.auto_streak[pid] >= settings.idle_moves_limit
+        if not (EXTRA_TURN_ON_HIT and outcome.result > 0):
+            self.turn = opp
+        if idle:
+            self._disarm()
+        else:
+            self._arm_move()
+        payload["deadline_ts"] = self.deadline_ts
+        await self._send(pid, {"t": "shot_result", **payload, "your_turn": self.turn == pid and not idle})
+        await self._send(opp, {"t": "opponent_shot", **payload, "your_turn": self.turn == opp and not idle})
+        if idle:
+            await self._forfeit(pid, "idle")
+        return None
+
+    async def _solo_shot(self, pid: uuid.UUID, cell) -> Optional[str]:
+        board = self.boards[self.opponent(pid)]
+        try:
+            outcome = board.shoot(int(cell))
         except (IllegalShot, TypeError, ValueError):
             return "illegal_shot"
         self.shots[pid].append(int(cell))
         now = time.time()
         self.think_ms[pid].append(int((now - self._turn_since) * 1000))
         self._turn_since = now
-        board = self.boards[opp]
+        await self._send(pid, {"t": "shot_result", "cell": int(cell), "result": outcome.result,
+                               "sunk_cells": outcome.sunk_cells, "revealed": outcome.revealed,
+                               "alive": board.alive, "auto": False, "auto_streak": 0,
+                               "your_turn": not board.done, "deadline_ts": None})
         if board.done:
-            payload = {"cell": cell, "result": outcome.result, "sunk_cells": outcome.sunk_cells,
-                       "revealed": outcome.revealed, "your_turn": False, "alive": board.alive}
-            await self._send(pid, {"t": "shot_result", **payload})
-            await self._send(opp, {"t": "opponent_shot", **payload})
-            await self._finish(pid, "fleet_sunk")
-            return None
-        if not (EXTRA_TURN_ON_HIT and outcome.result > 0):
-            self.turn = opp
-        self._arm(settings.move_s, self._expire_move)
-        base = {"cell": cell, "result": outcome.result, "sunk_cells": outcome.sunk_cells,
-                "revealed": outcome.revealed, "alive": board.alive, "deadline_ts": self.deadline_ts}
-        await self._send(pid, {"t": "shot_result", **base, "your_turn": self.turn == pid})
-        await self._send(opp, {"t": "opponent_shot", **base, "your_turn": self.turn == opp})
+            await self._end_solo()
+        else:
+            self._cancel(self._timer)
+            self._timer = self._later(settings.solo_idle_s, self._end_solo)
         return None
 
     async def leave(self, pid: uuid.UUID):
+        if self.status == FINISHED and self.solo == pid:
+            await self._end_solo()
+            return
         if not self.active:
             return
         if self.status == WAITING or self.opponent(pid) is None:
             await self._abandon("abandoned")
             return
-        await self._forfeit(pid, "forfeit")
+        await self._forfeit(pid, "resigned")
 
     # ---- finishing ----
     async def _expire_waiting(self):
@@ -283,8 +425,13 @@ class Match:
             await self._abandon("abandoned")
 
     async def _expire_move(self):
-        if self.status == PLAYING and self.turn is not None:
-            await self._forfeit(self.turn, "move_timeout")
+        """Time is up: a random shot at an unopened cell instead of a forfeit."""
+        if self.status != PLAYING or self.turn is None:
+            return
+        pid = self.turn
+        board = self.boards[self.opponent(pid)]
+        cell = random.choice([i for i in range(N * N) if not board.known[i]])
+        await self._shot(pid, cell, auto=True)
 
     async def _forfeit(self, loser: uuid.UUID, reason: str):
         if not self.active:
@@ -300,8 +447,9 @@ class Match:
         self.status = ABANDONED
         self.end_reason = reason
         self.finished_at = datetime.now(timezone.utc)
-        await self._broadcast({"t": "game_over", "winner": None, "you_won": None, "reason": reason, "enemy_ships": None})
-        await self._on_finish(self)
+        await self._broadcast({"t": "game_over", "winner": None, "you_won": None, "reason": reason,
+                               "enemy_ships": None, "solo": False})
+        await self._save()
 
     async def _finish(self, winner: uuid.UUID, reason: str):
         self._disarm_all()
@@ -309,13 +457,42 @@ class Match:
         self.winner = winner
         self.end_reason = reason
         self.finished_at = datetime.now(timezone.utc)
+        target = self.boards.get(self.opponent(winner))
+        if (reason in LEFT_EARLY and self.started_at is not None and target is not None
+                and not target.done and self.sockets.get(winner) is not None):
+            # the race is decided; the board is static — the winner may clear it for the stats
+            self.solo = winner
+            self._turn_since = time.time()
+            self._timer = self._later(settings.solo_idle_s, self._end_solo)
         for p in self.players:
-            opp = self.opponent(p)
-            theirs = self.boards.get(opp) if opp else None
-            await self._send(p, {
-                "t": "game_over", "winner": str(winner), "you_won": p == winner, "reason": reason,
-                "enemy_ships": theirs.ships if theirs else None,
-            })
+            await self._send(p, self._game_over(p))
+        if self.solo is None:
+            await self._save()
+
+    def _game_over(self, p: uuid.UUID) -> dict:
+        opp = self.opponent(p)
+        theirs = self.boards.get(opp) if opp else None
+        solo = self.solo == p
+        return {
+            "t": "game_over", "winner": str(self.winner), "you_won": p == self.winner, "reason": self.end_reason,
+            "enemy_ships": theirs.ships if (theirs is not None and not solo) else None,
+            "solo": solo, "n_shots": len(self.shots.get(p, [])),
+            "cleared": bool(theirs is not None and theirs.done),
+        }
+
+    async def _end_solo(self):
+        p = self.solo
+        if p is None:
+            return
+        self.solo = None
+        self._disarm()
+        await self._send(p, self._game_over(p))
+        await self._save()
+
+    async def _save(self):
+        if self._saved:
+            return
+        self._saved = True
         await self._on_finish(self)
 
     # ---- DB rows ----
@@ -331,6 +508,9 @@ class Match:
             for p in self.players:
                 opp = self.opponent(p)
                 board = self.boards[opp]
+                info: Dict[str, Any] = {"placement": self.placement_mode.get(p, "unknown")}
+                if self.auto_moves[p]:
+                    info["auto_moves"] = self.auto_moves[p]      # not the player's decisions
                 logs.append(GameLog(
                     client_game_id=uuid.uuid5(self.id, str(p)), mode="h2h", match_id=self.id,
                     attacker_kind="player", attacker_player=p, attacker_label="player",
@@ -338,6 +518,6 @@ class Match:
                     n_shots=len(self.shots[p]), fleet_cleared=board.done,
                     won=(p == self.winner), client="server",
                     think_ms=self.think_ms[p], started_at=self.started_at,
-                    client_info={"placement": self.placement_mode.get(p, "unknown")},
+                    client_info=info,
                 ))
         return row, logs

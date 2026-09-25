@@ -60,7 +60,7 @@ class LeaderboardRow(BaseModel):
     games: int
     wins: int
     win_rate: float
-    avg_shots: float
+    avg_shots: float | None      # over cleared boards; None — never cleared one
 
 
 # ---- telemetry ----

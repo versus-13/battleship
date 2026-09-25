@@ -1,4 +1,4 @@
-"""A human-vs-human match over WebSocket: two clients to game_over, reconnect, forfeit."""
+"""A human-vs-human match over WebSocket: two clients to game_over, reconnect, auto-moves, resign."""
 import asyncio
 import copy
 import time
@@ -11,7 +11,7 @@ from starlette.testclient import TestClient
 from app.db import engine
 from app.main import app
 
-from .conftest import SHIPS
+from .conftest import ALL_SHOTS, SHIPS
 
 
 @pytest_asyncio.fixture
@@ -180,21 +180,49 @@ def test_reconnect_restores_state(tc):
     recv_until(ws_a, "opponent_back")
 
 
-def test_disconnect_forfeit(tc):
+def test_disconnect_after_budget_is_a_loss(tc):
     a, b, ws_a, ws_b, room = setup_match(tc)
     place_both(ws_a, ws_b)
     close_ws(tc, ws_b)
-    recv_until(ws_a, "opponent_left")
-    over, _ = recv_until(ws_a, "game_over")          # BS_DISCONNECT_GRACE_S=1
+    left, _ = recv_until(ws_a, "opponent_left")
+    assert left["reconnect_deadline_ts"] is not None
+    over, _ = recv_until(ws_a, "game_over")          # BS_RECONNECT_BUDGET_S=1 + BS_DISCONNECT_AFTER_BUDGET_S=1
     assert over["you_won"] is True and over["reason"] == "disconnect"
 
 
-def test_move_timeout_forfeit(tc):
+def test_timeout_makes_a_random_shot_then_idle_loss(tc):
     a, b, ws_a, ws_b, room = setup_match(tc)
     a_first = place_both(ws_a, ws_b)
-    waiter = ws_b if a_first else ws_a
-    over, _ = recv_until(waiter, "game_over")        # BS_MOVE_S=2
-    assert over["you_won"] is True and over["reason"] == "move_timeout"
+    mover = ws_a if a_first else ws_b
+    res, _ = recv_until(mover, "shot_result")        # BS_MOVE_S=2: the server shot for the player
+    assert res["auto"] is True and res["auto_streak"] == 1
+    over, _ = recv_until(mover, "game_over")          # BS_IDLE_MOVES_LIMIT=2, both players are idle
+    assert over["reason"] == "idle"
+
+
+def test_resign_then_winner_clears_the_board(tc):
+    a, b, ws_a, ws_b, room = setup_match(tc)
+    place_both(ws_a, ws_b)
+    ws_b.send_json({"t": "leave"})
+    over_a, _ = recv_until(ws_a, "game_over")
+    over_b, _ = recv_until(ws_b, "game_over")
+    assert over_b["you_won"] is False and over_b["reason"] == "resigned"
+    assert over_a["you_won"] is True and over_a["solo"] is True and over_a["enemy_ships"] is None
+
+    for c in ALL_SHOTS:                               # the board is static: finish it for the stats
+        ws_a.send_json({"t": "shoot", "cell": c})
+        res, _ = recv_until(ws_a, "shot_result")
+        assert res["result"] >= 1
+    final, _ = recv_until(ws_a, "game_over")
+    assert final["solo"] is False and final["cleared"] is True and final["enemy_ships"] is not None
+
+    time.sleep(0.2)
+    st_a = tc.get(f"/api/players/{a['id']}/stats").json()
+    st_b = tc.get(f"/api/players/{b['id']}/stats").json()
+    assert st_a["h2h_wins"] == 1 and st_a["avg_shots"] is not None
+    assert st_b["h2h_games"] == 1 and st_b["h2h_wins"] == 0 and st_b["avg_shots"] is None
+    rows = {r["player_id"]: r for r in tc.get("/api/leaderboard?min_games=1").json()}
+    assert rows[b["id"]]["avg_shots"] is None and rows[b["id"]]["wins"] == 0
 
 
 def test_queue_matches_two_players(tc):

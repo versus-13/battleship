@@ -104,8 +104,8 @@ curl -sI localhost:8080/ | head -1    # HTTP/1.1 200
 cd /opt/battleship && docker compose pull && docker compose up -d
 ```
 
-Restarting `api` aborts H2H matches in progress (players get a forfeit by timer) — update
-during quiet hours. Roll back to a specific commit: `TAG=<sha> docker compose up -d`.
+Restarting `api` drops H2H matches in progress: they live in memory and are not saved (this
+includes a winner still clearing the board after a walk-out) — update during quiet hours. Roll back to a specific commit: `TAG=<sha> docker compose up -d`.
 Frontend only: `docker compose pull frontend && docker compose up -d frontend`.
 
 Useful: `docker compose logs -f api`, `docker compose exec db psql -U battleship`,
@@ -139,9 +139,33 @@ losing the storage = a new identity.
 
 WebSocket, client → server: `place{ships, mode}`, `shoot{cell}`, `leave`, `ping`, `state`.
 Server → client: `state` (full snapshot, on every connection), `opponent_joined`,
-`opponent_ready`, `opponent_left{grace_s}`, `opponent_back`, `placed`, `start{your_turn}`,
-`shot_result` / `opponent_shot` `{cell, result 0|1|2, sunk_cells, revealed, your_turn, alive}`,
-`game_over{winner, you_won, reason, enemy_ships}`, `error{code}`.
+`opponent_ready`, `opponent_left{grace_s, reconnect_deadline_ts}`, `opponent_back`, `placed`,
+`start{your_turn, deadline_ts}`,
+`shot_result` / `opponent_shot` `{cell, result 0|1|2, sunk_cells, revealed, your_turn, alive, deadline_ts, auto, auto_streak}`,
+`game_over{winner, you_won, reason, enemy_ships, solo, n_shots, cleared}`, `error{code}`.
+
+Time rules (the server keeps every clock; `*_ts` are unix seconds of the server, the client
+only displays them):
+
+* **Move timer** `BS_MOVE_S` = 30 s. When it runs out, the server shoots a random unopened cell
+  for the player (`auto: true`); there is no forfeit, the idle player simply plays worse.
+  `BS_IDLE_MOVES_LIMIT` = 5 auto-moves in a row ends the match: `reason: idle`.
+* **Reconnect budget** `BS_RECONNECT_BUDGET_S` = 90 s per player **per match**, spent while
+  offline (from placement on, including never opening the socket). While it lasts, the
+  offline player's move timer waits (`deadline_ts: null`), and the opponent sees
+  `opponent.reconnect_deadline_ts` in `state`. When the budget is spent, auto-moves resume, and
+  `BS_DISCONNECT_AFTER_BUDGET_S` = 120 s more offline ends the match: `reason: disconnect`.
+* **Surrender** — `leave` → `reason: resigned`.
+* A match left early (`resigned | idle | disconnect`) is a loss for the leaver. The winner gets
+  `game_over{solo: true}` without the enemy ships and may keep shooting (`your_turn` stays true,
+  no move timer, `BS_SOLO_IDLE_S` = 5 min of inactivity or `leave` ends it). The board is static,
+  so clearing it counts towards the winner's average shots. The logs are written after the solo;
+  the final `game_over{solo: false, cleared, n_shots}` reveals the ships.
+
+Two numbers per player: the match record (`wins`/`games`, walk-outs count as losses) and skill —
+`avg_shots` over **cleared boards only** (`null` if none), which the opponent cannot spoil.
+In the logs the server-made moves are `client_info.auto_moves` (indices into `shots`);
+`battleship.analysis.compare_moves` skips them. Export outcomes: `finished | lost | resigned | abandoned`.
 
 Placement — `[[idx,…] × 10]`, cells 0..99, `idx = row*10 + col`. Columns А…К, rows 1–10:
 "Д6" = col 4, row 5.

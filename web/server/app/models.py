@@ -36,7 +36,7 @@ class Match(Base):
     player_b: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("players.id"))
     status: Mapped[str] = mapped_column(String(12), nullable=False)       # waiting|placing|playing|finished|abandoned
     winner: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("players.id"))
-    end_reason: Mapped[str | None] = mapped_column(String(16))            # fleet_sunk|forfeit|move_timeout|disconnect|abandoned
+    end_reason: Mapped[str | None] = mapped_column(String(16))            # fleet_sunk|resigned|idle|disconnect|abandoned (old rows: forfeit, move_timeout)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

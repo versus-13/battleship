@@ -23,8 +23,12 @@ class Settings(BaseSettings):
     # H2H timers (seconds)
     room_wait_s: int = 15 * 60
     placing_s: int = 3 * 60
-    move_s: int = 45
-    disconnect_grace_s: int = 60
+    move_s: float = 30                      # then a random shot is made for the player
+    idle_moves_limit: int = 5               # this many auto-moves in a row — the player is gone, loss
+    reconnect_budget_s: float = 90          # offline time per player per match; the move timer waits
+    disconnect_after_budget_s: float = 120  # offline this long after the budget ran out — loss
+    solo_idle_s: float = 5 * 60             # finishing the board after the opponent left
+    disconnect_grace_s: float = 60          # the host left the waiting room
     queue_ttl_s: int = 120
 
 

@@ -34,6 +34,11 @@ async def test_export_row_matches_gamelog_format(client, player):
     assert d["outcome"] == "finished" and d["think_ms"] == list(range(20))
     row.fleet_cleared, row.won = False, False
     assert row_to_gamelog(row)["outcome"] == "lost"
+    assert row_to_gamelog(row, "resigned")["outcome"] == "resigned"
+    assert row_to_gamelog(row, "idle")["outcome"] == "abandoned"
+    assert row_to_gamelog(row, "idle")["client"]["end_reason"] == "idle"
+    row.won = True                                 # won by a walk-out, did not finish the board
+    assert row_to_gamelog(row, "disconnect")["outcome"] == "abandoned"
     row.won = None
     assert row_to_gamelog(row)["outcome"] == "abandoned"
     assert d["client"]["placement"] == "random" and d["client"]["mode"] == "h2m"

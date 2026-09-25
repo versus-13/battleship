@@ -97,7 +97,7 @@ export function Home() {
               <thead><tr><th>{t.home.colPlayer}</th><th>{t.home.colGames}</th><th>{t.home.colWins}</th><th>{t.home.colShots}</th></tr></thead>
               <tbody>
                 {leaders.map((r) => (
-                  <tr key={r.player_id}><td>{displayName(r.name, r.tag)}</td><td>{r.games}</td><td>{Math.round(r.win_rate * 100)}%</td><td>{r.avg_shots}</td></tr>
+                  <tr key={r.player_id}><td>{displayName(r.name, r.tag)}</td><td>{r.games}</td><td>{Math.round(r.win_rate * 100)}%</td><td>{r.avg_shots ?? "—"}</td></tr>
                 ))}
               </tbody>
             </table>

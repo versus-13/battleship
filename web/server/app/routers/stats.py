@@ -40,24 +40,28 @@ async def leaderboard(
     limit: int = Query(default=50, ge=1, le=200),
     session: AsyncSession = Depends(get_session),
 ):
-    """Human-vs-human games only: the server is the referee there, no cheating."""
+    """
+    Human-vs-human games only: the server is the referee there, no cheating.
+    Two independent numbers: the match record (a match left early is a loss) and skill —
+    mean shots over cleared boards only, which the opponent's behaviour cannot spoil.
+    """
     games = func.count()
     wins = func.sum(case((GameLog.won.is_(True), 1), else_=0)).cast(Integer)
-    avg_shots = func.avg(GameLog.n_shots)
+    avg_shots = func.avg(GameLog.n_shots).filter(GameLog.fleet_cleared)
     q = (
         select(GameLog.attacker_player, Player.name, games, wins, avg_shots)
         .join(Player, Player.id == GameLog.attacker_player)
         .where(GameLog.mode == "h2h", GameLog.attacker_kind == "player", GameLog.won.isnot(None))
         .group_by(GameLog.attacker_player, Player.name)
         .having(games >= min_games)
-        .order_by((wins * 1.0 / games).desc(), avg_shots.asc())
+        .order_by((wins * 1.0 / games).desc(), avg_shots.asc().nulls_last())
         .limit(limit)
     )
     rows = (await session.execute(q)).all()
     return [
         LeaderboardRow(
             player_id=pid, name=name, tag=player_tag(pid), games=g, wins=w,
-            win_rate=round(w / g, 3), avg_shots=round(float(a), 2),
+            win_rate=round(w / g, 3), avg_shots=round(float(a), 2) if a is not None else None,
         )
         for pid, name, g, w, a in rows
     ]

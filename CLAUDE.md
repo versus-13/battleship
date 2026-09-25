@@ -210,6 +210,13 @@ phase (`split_by_phase`).
 * H2H matches live in the memory of one process — `uvicorn --workers 1`. Match
   timers finish the match themselves, so `_disarm` never cancels the current task
   (otherwise `game_over` is never sent).
+* H2H time rules (details in `web/README.md`): the move timer (30 s) makes a random shot
+  instead of a forfeit; 5 auto-moves in a row — `idle`. The reconnect budget (90 s) is per
+  match, not per disconnect; while it lasts the offline player's move timer waits. A walk-out
+  (`resigned | idle | disconnect`) is a loss, and the winner may finish clearing the static
+  board ("solo") — the logs are written only after the solo. `avg_shots` counts cleared boards
+  only: a partial board would flatter the one who left. Auto-moves are marked in
+  `client_info.auto_moves` — they are not human decisions, `compare_moves` skips them.
 * React StrictMode mounts twice: side effects (AI timer, socket) go only in
   `start()/stop()` and effects, not constructors; in `MatchSocket` the `onclose` of
   a discarded socket must not touch state.

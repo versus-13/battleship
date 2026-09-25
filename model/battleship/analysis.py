@@ -29,10 +29,15 @@ def _shot_result(game: Game, idx: int) -> str:
 def compare_moves(log: GameLog, prob_fn: Callable[[Game], np.ndarray]) -> List[Dict[str, Any]]:
     """
     prob_fn(game) -> probability map (n, n).
-    Returns a comparison record for every move.
+    Returns a comparison record for every move of the player. Moves the H2H server made
+    for an idle player when the move timer ran out (client["auto_moves"]) are random,
+    not decisions, and are skipped.
     """
+    auto = set((log.client or {}).get("auto_moves") or [])
     out = []
     for ply, (game, idx) in enumerate(replay(log)):
+        if ply in auto:
+            continue
         n = game.rules.size
         r, c = idx // n, idx % n
         p = np.asarray(prob_fn(game), dtype=np.float64)

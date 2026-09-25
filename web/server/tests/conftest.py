@@ -3,6 +3,10 @@ import uuid
 
 os.environ.setdefault("BS_DATABASE_URL", "postgresql+asyncpg://localhost:5432/battleship_test")
 os.environ.setdefault("BS_DISCONNECT_GRACE_S", "1")
+os.environ.setdefault("BS_RECONNECT_BUDGET_S", "1")
+os.environ.setdefault("BS_DISCONNECT_AFTER_BUDGET_S", "1")
+os.environ.setdefault("BS_IDLE_MOVES_LIMIT", "2")
+os.environ.setdefault("BS_SOLO_IDLE_S", "5")
 os.environ.setdefault("BS_MOVE_S", "2")
 os.environ.setdefault("BS_PLACING_S", "2")
 
