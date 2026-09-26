@@ -88,6 +88,8 @@ echo "POSTGRES_PASSWORD=$(openssl rand -hex 24)" > .env
 mkdir -p moderation && for f in stoplist allowlist; do
   curl -fsSL -o moderation/$f.txt https://raw.githubusercontent.com/versus-13/battleship/master/web/server/app/data/$f.txt
 done && chmod 755 moderation && chmod 644 moderation/*.txt
+# reports for manual review are written here by api (runs as APP_UID, default 10001)
+mkdir -p reports && sudo chown 10001:10001 reports
 
 # 3. containers (migrations run when api starts)
 docker compose pull && docker compose up -d
@@ -135,6 +137,7 @@ losing the storage = a new identity.
 | `GET /api/rooms/{code}`, `POST /api/rooms/{code}/join` | info and join |
 | `POST /api/queue` → `queued \| matched` | random queue (poll every 2 s); `DELETE /api/queue` |
 | `GET /api/matches/current`, `GET /api/matches/{id}` | current match and its snapshot |
+| `POST /api/matches/{id}/report` `{reason}` | a report on the opponent of this match, see "Reports"; always 204 |
 | `WS /ws/matches/{id}` | first message `{"t":"hello","token":secret}` |
 
 WebSocket, client → server: `place{ships, mode}`, `shoot{cell}`, `leave`, `ping`, `state`.
@@ -209,3 +212,30 @@ read-only over the copies in the image, so they are edited without being publish
 repository copies serve the tests and local runs. The lists are read once at startup: after
 editing, run `docker compose restart api` (this aborts H2H matches in progress).
 Names that are already saved are not re-checked.
+
+Besides the stop-list, `data/reserved.txt` (same format, code `reserved`) rejects names that
+pretend to be staff (admin, модератор, поддержка, …), the placeholder word «Игрок»/«Player»
+and link tokens (www, com, ru, vk, tg, telegram…); a run of 5+ digits or 6+ digits in total is
+`contacts` (phones, messenger ids). `reserved.txt` ships in the image, it is not mounted.
+A `~root` shorter than 3 letters after collapsing repeats (`~xxx` → `x`) is checked as a whole
+word, otherwise it would reject every name containing that letter.
+
+## Reports
+
+`POST /api/matches/{id}/report {reason}`, `reason` ∈ `name | impersonation | cheating | stalling | bug`.
+A report is always about a match: the reporter must have played it (the live match in memory,
+otherwise the `h2h_matches` row), the reported player is the opponent — the server decides.
+One report per match per reporter (`reports.uq_report_match_reporter`). The answer is always
+204 with no body — also for a duplicate or a stranger: the reporter only sees "thanks".
+
+* `name`, `impersonation` — `BS_NAME_REPORT_THRESHOLD` = 3 **different** players reporting the
+  **current** name hide it: `name` becomes null (shown as «Игрок#ab12»), `/me` returns
+  `name_hidden: true` and the home screen asks for a new one; the same name is refused with
+  `name_hidden`, and reports on an old name do not affect a new one.
+* `stalling` — stored only: the move timer already punishes it, the logs hold the facts.
+* `cheating`, `bug` — stored and written as a text file into `BS_REPORTS_DIR`
+  (`/opt/battleship/reports` in production), one file per report, with the match, both
+  players, the reported player's move times and the commands to check the match
+  (`export_logs --match <id>` → `battleship.analyze`). Review them and delete the files.
+  Cheating is never acted on automatically: losers are often sure the winner cheated.
+

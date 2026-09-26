@@ -33,7 +33,7 @@ export function Home() {
   const saveName = async () => {
     setSaving(true); setNameError(null);
     try {
-      if (name.trim()) { const r = await api.setName(name); setMe((m) => m && { ...m, name: r.name }); }
+      if (name.trim()) { const r = await api.setName(name); setMe((m) => m && { ...m, name: r.name, name_hidden: false }); }
       else { await api.clearName(); setMe((m) => m && { ...m, name: null }); }
     } catch (e) {
       setNameError(e instanceof ApiError ? e.code : "offline");
@@ -79,6 +79,7 @@ export function Home() {
             <button type="submit" className="btn btn--small" disabled={saving || offline}>{t.btn.save}</button>
           </form>
           {nameError && <span className="error">{nameErrorText(t, nameError)}</span>}
+          {!nameError && me?.name_hidden && <span className="error">{t.home.nameHidden}</span>}
           {me && <span className="muted">{t.home.you(displayName(me.name, me.tag))}</span>}
           <div className="divider" />
           <span className="label">{t.home.stats}</span>

@@ -22,7 +22,7 @@ from app.main import app
 @pytest_asyncio.fixture(autouse=True)
 async def clean_db():
     async with engine.begin() as conn:
-        await conn.execute(text("TRUNCATE game_logs, h2h_matches, name_rejects, players CASCADE"))
+        await conn.execute(text("TRUNCATE reports, game_logs, h2h_matches, name_rejects, players CASCADE"))
     yield
 
 

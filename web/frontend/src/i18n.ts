@@ -3,6 +3,7 @@
  * A module-level store rather than a context: non-React code (displayName) reads it too.
  */
 import { useSyncExternalStore } from "react";
+import type { ReportReason } from "./api/client";
 import { colOf, rowOf } from "./engine/rules";
 
 export type Lang = "en" | "ru";
@@ -110,12 +111,16 @@ const en = {
     rules: "Rules: 10 × 10 board, fleet 4-3-3-2-2-2-1-1-1-1, ships may not touch, not even at the corners. Hit — shoot again.",
     alreadyInMatch: "you are already in a match",
     roomFailed: "could not create a room",
+    nameHidden: "Your name was hidden after reports from other players — please pick a new one.",
   },
   nameErrors: {
     too_short: "too short — at least 2 characters",
     too_long: "too long — up to 16 characters",
     invalid_chars: "only letters, digits, space, hyphen and underscore",
     rejected_profanity: "this name won't do, try another one",
+    reserved: "this name looks official or like a link — pick another one",
+    contacts: "no phone numbers or long digit runs in the name",
+    name_hidden: "this name was hidden after reports from other players — pick another one",
     rate_limited: "the name can be changed once every 10 minutes",
   } as Record<string, string>,
   nameSaveFailed: "could not save the name",
@@ -153,6 +158,22 @@ const en = {
     not_your_turn: "it's not your turn", illegal_shot: "this cell has already been shot", bad_placement: "invalid placement",
     wrong_phase: "not allowed right now", no_match: "match not found", not_in_match: "you are not in this match",
   } as Record<string, string>,
+  report: {
+    button: "Report the opponent",
+    sent: "report sent",
+    title: "Report",
+    question: "What happened?",
+    reasons: {
+      name: "Rude or offensive name",
+      impersonation: "Pretends to be the staff",
+      cheating: "I suspect cheating",
+      stalling: "Stalls / does not move",
+      bug: "Something broke in the game",
+    } as Record<ReportReason, string>,
+    send: "Send",
+    close: "Close",
+    thanks: "Thank you",
+  },
   queue: {
     subtitle: "random opponent",
     searching: "Looking for an opponent…",
@@ -269,12 +290,16 @@ const ru: Dict = {
     rules: "Правила: поле 10 × 10, флот 4-3-3-2-2-2-1-1-1-1, корабли не касаются даже углами. Попал — стреляешь снова.",
     alreadyInMatch: "вы уже в матче",
     roomFailed: "не удалось создать комнату",
+    nameHidden: "Ваше имя скрыто по жалобам игроков — придумайте новое.",
   },
   nameErrors: {
     too_short: "слишком коротко — от 2 символов",
     too_long: "слишком длинно — до 16 символов",
     invalid_chars: "только буквы, цифры, пробел, дефис и подчёркивание",
     rejected_profanity: "такое имя не подходит, попробуйте другое",
+    reserved: "имя похоже на служебное или на ссылку — выберите другое",
+    contacts: "в имени не должно быть телефонов и длинных рядов цифр",
+    name_hidden: "это имя скрыто по жалобам игроков — выберите другое",
     rate_limited: "имя можно менять раз в 10 минут",
   },
   nameSaveFailed: "не удалось сохранить имя",
@@ -311,6 +336,22 @@ const ru: Dict = {
   errors: {
     not_your_turn: "сейчас не ваш ход", illegal_shot: "в эту клетку уже стреляли", bad_placement: "расстановка неверна",
     wrong_phase: "сейчас нельзя", no_match: "матч не найден", not_in_match: "вы не участник этого матча",
+  },
+  report: {
+    button: "Пожаловаться",
+    sent: "жалоба отправлена",
+    title: "Жалоба",
+    question: "Что случилось?",
+    reasons: {
+      name: "Неприличное или оскорбительное имя",
+      impersonation: "Выдаёт себя за администрацию",
+      cheating: "Подозрение на читерство",
+      stalling: "Тянет время / не ходит",
+      bug: "Что-то сломалось в игре",
+    },
+    send: "Отправить",
+    close: "Закрыть",
+    thanks: "Спасибо",
   },
   queue: {
     subtitle: "случайный соперник",

@@ -1,6 +1,7 @@
 # Production on a VPS: prebuilt images from GHCR (built by GitHub Actions on push to master).
 # Put it at /opt/battleship/docker-compose.yml next to .env (POSTGRES_PASSWORD) and
-# moderation/{stoplist,allowlist}.txt (name filters, see the api service).
+# moderation/{stoplist,allowlist}.txt (name filters, see the api service) and an empty
+# reports/ writable by APP_UID (reports for manual review land there as text files).
 # Update: docker compose pull && docker compose up -d
 # Ports are bound to localhost only; the reverse proxy with TLS is external (see web/README.md).
 #
@@ -55,6 +56,12 @@ services:
         source: ./moderation/allowlist.txt
         target: /srv/app/data/allowlist.txt
         read_only: true
+        bind: { create_host_path: false }
+      # reports that need a human (cheating, "something broke") — one .txt per report;
+      # the only writable path of the read-only container. Owned by APP_UID.
+      - type: bind
+        source: ./reports
+        target: /srv/reports
         bind: { create_host_path: false }
     ports:
       - "127.0.0.1:8000:8000"

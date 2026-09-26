@@ -1,0 +1,37 @@
+# Reserved words and links: names that pretend to be staff or advertise something.
+# Same format as stoplist.txt (=word — exact token, ~root — substring, both normalized).
+# Unlike the stop-list this file ships in the image and is not mounted from the host.
+# A match is rejected with the code "reserved".
+
+# --- staff ---
+~админ
+~модератор
+~поддержк
+=модер
+=разработчик
+~admin
+~moderator
+=mod
+=support
+=official
+=staff
+=system
+=developer
+# the placeholder shown instead of a hidden name
+=игрок
+=player
+
+# --- links and domains (dots and @ are already forbidden by the charset) ---
+=www
+~http
+=com
+=net
+=org
+=ru
+=рф
+=tg
+=vk
+~vkcom
+~telegram
+~телеграм
+=tme

@@ -14,7 +14,7 @@ from sqlalchemy import text
 from .config import settings
 from .db import engine
 from .matchmaking import registry
-from .routers import games, players, rooms, stats
+from .routers import games, players, reports, rooms, stats
 from .schemas import ModelInfo
 from .ws import router as ws_router
 
@@ -40,6 +40,7 @@ app.include_router(players.router)
 app.include_router(games.router)
 app.include_router(stats.router)
 app.include_router(rooms.router)
+app.include_router(reports.router)
 app.include_router(ws_router)
 
 

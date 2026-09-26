@@ -8,6 +8,7 @@ import { FleetCounter } from "../components/FleetCounter";
 import { GameOver } from "../components/GameOver";
 import { Header } from "../components/Header";
 import { Journal, type JournalEntry } from "../components/Journal";
+import { ReportDialog, ReportLink, useReport } from "../components/Report";
 import { FLEET, TOTAL_CELLS, randomPlacement, type Ships } from "../engine/rules";
 import type { PlacementMode } from "../game/telemetry";
 import { useI18n } from "../i18n";
@@ -100,6 +101,7 @@ export function MatchOnline() {
   const [now, setNow] = useState(Date.now() / 1000);
   /** the player chose to finish clearing the board — the overlay is hidden until the end */
   const [clearing, setClearing] = useState(false);
+  const report = useReport(id);
   const sock = useRef<MatchSocket | null>(null);
   const shipsRef = useRef(ships);
   shipsRef.current = ships;
@@ -179,6 +181,10 @@ export function MatchOnline() {
   const secondsLeft = view?.deadline ? Math.max(0, Math.round(view.deadline - now)) : null;
   const foeReconnectLeft = view?.foeReconnectUntil ? Math.max(0, Math.round(view.foeReconnectUntil - now)) : null;
 
+  // only inside a match and only against the opponent of this match
+  const reportLink = view?.opponent ? <ReportLink sent={report.sent} onOpen={() => report.setOpen(true)} /> : null;
+  const reportDialog = report.open && <ReportDialog onSend={report.send} onClose={() => report.setOpen(false)} />;
+
   const header = <Header subtitle={view?.opponent ? t.online.vs(foeName) : t.online.h2h} />;
 
   if (!view) {
@@ -211,7 +217,8 @@ export function MatchOnline() {
         <Placement ships={ships} onChange={(s, m) => { setShips(s); setMode(m); }} busy={placing}
           onConfirm={() => { setPlacing(true); sock.current?.send({ t: "place", ships, mode }); }}
           status={t.placement.status} statusHint={secondsLeft !== null ? t.online.placementHint(secondsLeft, !!view.opponent?.placed) : undefined}
-          extra={view.error && <span className="error">{errorText}</span>} />
+          extra={<>{view.error && <span className="error">{errorText}</span>}{reportLink}</>} />
+        {reportDialog}
       </div>
     );
   }
@@ -264,6 +271,7 @@ export function MatchOnline() {
               ? <button type="button" className="btn btn--secondary btn--block" onClick={() => sock.current?.send({ t: "leave" })}>{t.btn.stopClearing}</button>
               : <button type="button" className="btn btn--secondary btn--block" disabled={over} onClick={() => sock.current?.send({ t: "leave" })}>{t.btn.surrender}</button>}
           </div>
+          {reportLink}
         </aside>
       </section>
       <Journal entries={view.journal} foeName={foeName} hint={t.journal.hint} />
@@ -275,8 +283,10 @@ export function MatchOnline() {
           ].filter(Boolean).join(" ")}
           {...(view.solo
             ? { primary: t.btn.clear, onPrimary: () => setClearing(true), secondary: t.btn.home, onSecondary: goHome }
-            : { primary: t.btn.home, onPrimary: () => navigate("/") })} />
+            : { primary: t.btn.home, onPrimary: () => navigate("/") })}
+          extra={reportLink} />
       )}
+      {reportDialog}
     </div>
   );
 }

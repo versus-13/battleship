@@ -42,10 +42,15 @@ class PlayerOut(BaseModel):
     tag: str                    # short id suffix for "Name#a1b2"
     created_at: datetime | None = None
     stats: Stats | None = None
+    name_hidden: bool = False   # the name was hidden by reports — ask for a new one
 
 
 class NameIn(BaseModel):
     name: str = Field(min_length=1, max_length=64)
+
+
+class ReportIn(BaseModel):
+    reason: Literal["name", "impersonation", "cheating", "stalling", "bug"]
 
 
 class NameOut(BaseModel):

@@ -12,6 +12,7 @@ from ..db import get_session
 from ..models import NameReject, Player
 from ..moderation import clean_name, moderator
 from ..schemas import NameIn, NameOut, PlayerCreated, PlayerOut, Stats
+from .reports import name_hidden_by_reports
 from .stats import player_stats
 
 router = APIRouter(prefix="/api/players", tags=["players"])
@@ -32,6 +33,7 @@ async def me(player: Player = Depends(get_current_player), session: AsyncSession
     return PlayerOut(
         player_id=player.id, name=player.name, tag=player_tag(player.id),
         created_at=player.created_at, stats=await player_stats(session, player.id),
+        name_hidden=player.name is None and player.name_hidden_at is not None,
     )
 
 
@@ -50,7 +52,10 @@ async def set_name(
         session.add(NameReject(reason=verdict.code))
         await session.commit()
         raise HTTPException(422, {"code": verdict.code})
+    if await name_hidden_by_reports(session, player.id, name):
+        raise HTTPException(422, {"code": "name_hidden"})
     player.name = name
+    player.name_hidden_at = None
     player.name_set_at = now
     await session.commit()
     return NameOut(name=name, tag=player_tag(player.id))

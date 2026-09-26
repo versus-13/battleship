@@ -22,6 +22,7 @@ class Player(Base):
     secret_hash: Mapped[bytes] = mapped_column(LargeBinary(32), nullable=False)
     name: Mapped[str | None] = mapped_column(Text)
     name_set_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    name_hidden_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))  # hidden by reports
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     last_seen: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 
@@ -78,6 +79,29 @@ class GameLog(Base):
         CheckConstraint("attacker_kind IN ('player','model','heuristic')", name="ck_game_log_attacker_kind"),
         Index("ix_game_logs_attacker_created", "attacker_player", "created_at"),
         Index("ix_game_logs_mode_cleared", "mode", "fleet_cleared"),
+    )
+
+
+REPORT_REASONS = ("name", "impersonation", "cheating", "stalling", "bug")
+
+
+class Report(Base):
+    """A report on the opponent of an H2H match: one per match per reporter."""
+    __tablename__ = "reports"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    # no FK: during a match its h2h_matches row does not exist yet (written at the end)
+    match_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
+    reporter: Mapped[uuid.UUID] = mapped_column(ForeignKey("players.id"), nullable=False)
+    reported: Mapped[uuid.UUID] = mapped_column(ForeignKey("players.id"), nullable=False)
+    reason: Mapped[str] = mapped_column(String(16), nullable=False)
+    reported_name: Mapped[str | None] = mapped_column(Text)            # the name at the time of the report
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+    __table_args__ = (
+        UniqueConstraint("match_id", "reporter", name="uq_report_match_reporter"),
+        CheckConstraint("reason IN ('name','impersonation','cheating','stalling','bug')", name="ck_report_reason"),
+        Index("ix_reports_reported_reason", "reported", "reason"),
     )
 
 

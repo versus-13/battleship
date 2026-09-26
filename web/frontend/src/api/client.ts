@@ -11,7 +11,9 @@ export interface Stats {
   games: number; wins: number; win_rate: number | null; avg_shots: number | null; best_shots: number | null;
   h2h_games: number; h2m_games: number; h2h_wins: number;
 }
-export interface Me { player_id: string; name: string | null; tag: string; stats: Stats | null }
+/** name_hidden: the name was hidden by reports of other players — ask for a new one */
+export interface Me { player_id: string; name: string | null; tag: string; stats: Stats | null; name_hidden: boolean }
+export type ReportReason = "name" | "impersonation" | "cheating" | "stalling" | "bug";
 export interface LeaderRow { player_id: string; name: string | null; tag: string; games: number; wins: number; win_rate: number; avg_shots: number | null }
 export interface ModelInfo { version: string; url: string }
 
@@ -69,6 +71,7 @@ export const api = {
   joinRoom: (code: string) => request<{ match_id: string; ws_url: string }>("POST", `/api/rooms/${code}/join`),
   queue: () => request<{ status: "queued" | "matched"; match_id: string | null; ws_url: string | null }>("POST", "/api/queue"),
   leaveQueue: () => request<void>("DELETE", "/api/queue"),
+  report: (matchId: string, reason: ReportReason) => request<void>("POST", `/api/matches/${matchId}/report`, { reason }),
   currentMatch: () => request<{ match_id: string | null; ws_url?: string; phase?: string; code?: string | null }>("GET", "/api/matches/current"),
 };
 

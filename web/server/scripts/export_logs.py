@@ -2,7 +2,7 @@
 Export of game logs to JSONL in the model/battleship/telemetry.GameLog format —
 read directly by `python -m battleship.analyze` and `telemetry.logs_to_dataset()`.
 
-    python -m scripts.export_logs --out logs.jsonl [--mode h2h] [--attacker player] [--all]
+    python -m scripts.export_logs --out logs.jsonl [--mode h2h] [--attacker player] [--all] [--match <uuid>]
 
 By default only games played to the end (fleet_cleared). --all adds unfinished ones:
 useless for the shots metric but valuable as a source of human placements.
@@ -10,6 +10,7 @@ useless for the shots metric but valuable as a source of human placements.
 import argparse
 import asyncio
 import json
+import uuid
 
 from sqlalchemy import select
 
@@ -91,6 +92,7 @@ async def main():
     ap.add_argument("--mode", choices=["h2m", "h2h"])
     ap.add_argument("--attacker", choices=["player", "model", "heuristic"])
     ap.add_argument("--all", action="store_true")
+    ap.add_argument("--match", type=uuid.UUID, help="one H2H match (e.g. from a report file)")
     args = ap.parse_args()
 
     q = select(GameLog, Match.end_reason).outerjoin(Match, Match.id == GameLog.match_id).order_by(GameLog.id)
@@ -98,6 +100,8 @@ async def main():
         q = q.where(GameLog.fleet_cleared)
     if args.mode:
         q = q.where(GameLog.mode == args.mode)
+    if args.match:
+        q = q.where(GameLog.match_id == args.match)
     if args.attacker:
         q = q.where(GameLog.attacker_kind == args.attacker)
 

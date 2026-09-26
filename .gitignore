@@ -21,6 +21,7 @@ __pycache__/
 node_modules/
 web/frontend/dist/
 web/frontend/e2e/shots/
+web/server/reports/
 
 # --- web: database backups ---
 web/backups/*.dump

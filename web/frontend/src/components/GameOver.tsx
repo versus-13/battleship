@@ -1,4 +1,4 @@
-export function GameOver(p: { title: string; text: string; primary: string; onPrimary: () => void; secondary?: string; onSecondary?: () => void }) {
+export function GameOver(p: { title: string; text: string; primary: string; onPrimary: () => void; secondary?: string; onSecondary?: () => void; extra?: React.ReactNode }) {
   return (
     <div className="overlay" role="dialog" aria-modal="true">
       <div className="overlay__card">
@@ -8,6 +8,7 @@ export function GameOver(p: { title: string; text: string; primary: string; onPr
           <button type="button" className="btn btn--block" onClick={p.onPrimary}>{p.primary}</button>
           {p.secondary && <button type="button" className="btn btn--secondary btn--block" onClick={p.onSecondary}>{p.secondary}</button>}
         </div>
+        {p.extra}
       </div>
     </div>
   );

@@ -17,6 +17,11 @@ class Settings(BaseSettings):
     # names
     name_change_cooldown_s: int = 600
 
+    # reports: this many different players reporting a name (or impersonation) hide it;
+    # cheating and "something broke" go to text files in reports_dir for manual review
+    name_report_threshold: int = 3
+    reports_dir: str = "reports"
+
     # telemetry
     games_per_hour: int = 60
 

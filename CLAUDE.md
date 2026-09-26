@@ -217,6 +217,10 @@ phase (`split_by_phase`).
   board ("solo") — the logs are written only after the solo. `avg_shots` counts cleared boards
   only: a partial board would flatter the one who left. Auto-moves are marked in
   `client_info.auto_moves` — they are not human decisions, `compare_moves` skips them.
+* Reports (`POST /api/matches/{id}/report`) are bound to a match, one per match per reporter,
+  always 204. `reports.match_id` has no FK: the `h2h_matches` row is written only when the
+  match ends. 3 different reporters on the current name hide it; cheating and "something
+  broke" go to text files in `BS_REPORTS_DIR` for manual review — never automated.
 * React StrictMode mounts twice: side effects (AI timer, socket) go only in
   `start()/stop()` and effects, not constructors; in `MatchSocket` the `onclose` of
   a discarded socket must not touch state.
