@@ -106,8 +106,18 @@ curl -sI localhost:8080/ | head -1    # HTTP/1.1 200
 cd /opt/battleship && docker compose pull && docker compose up -d
 ```
 
-Restarting `api` drops H2H matches in progress: they live in memory and are not saved (this
-includes a winner still clearing the board after a walk-out) — update during quiet hours. Roll back to a specific commit: `TAG=<sha> docker compose up -d`.
+Restarting `api` does not end H2H matches in progress. They live in memory, but every
+unfinished match is mirrored into `live_matches`: at most `BS_CHECKPOINT_S` = 1 s after a
+move or a phase change, and fully (with exact clocks) on SIGTERM. On start they are restored
+before the server accepts connections. The clients see
+"the server is being updated" (close code 1012) and reconnect as after a network glitch; the
+game continues from the same move. Clocks are stored as time left, so the downtime counts
+against nobody, and for `BS_RESTART_GRACE_S` = 60 s after the start being offline is free,
+after that the usual reconnect budget applies. A crash (`kill -9`, OOM) loses at most the last
+second. The `CMD` of the image must `exec uvicorn` — otherwise `sh` swallows SIGTERM, Docker
+kills the container after `stop_grace_period` (30 s) and the exact state is not written.
+Logs of games against the model that could not be sent during the downtime wait in the
+browser (`localStorage` `bs.outbox`) and are sent on the next visit. Roll back to a specific commit: `TAG=<sha> docker compose up -d`.
 Frontend only: `docker compose pull frontend && docker compose up -d frontend`.
 
 Useful: `docker compose logs -f api`, `docker compose exec db psql -U battleship`,

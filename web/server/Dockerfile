@@ -5,5 +5,7 @@ COPY requirements.txt ./
 RUN pip install --no-cache-dir -r requirements.txt
 COPY . ./
 EXPOSE 8000
-# a single worker: matches live in the process memory
-CMD ["sh", "-c", "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 1 --proxy-headers --forwarded-allow-ips='*'"]
+# a single worker: matches live in the process memory.
+# exec: uvicorn must be PID 1 to get SIGTERM — otherwise sh swallows it, Docker kills the
+# container after the grace period and the unfinished matches are not saved
+CMD ["sh", "-c", "alembic upgrade head && exec uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 1 --proxy-headers --forwarded-allow-ips='*'"]

@@ -13,10 +13,19 @@ Time rules (all clocks are here, the client only displays them):
 * a match left early (resigned / idle / disconnect) is a loss for the leaver; the
   winner may finish clearing the static board ("solo") so their shots-to-clear counts.
   The logs are written when the solo ends.
+
+Restart: to_state() / from_state() carry an unfinished match through a server restart
+(matchmaking checkpoints it into live_matches). Clocks are stored as remaining time, not
+deadlines, so the downtime costs nobody anything; for restart_grace_s after the restore
+offline time is free too — the clients reconnect as after a network glitch.
+A new field of Match must be added to to_state/from_state (bump STATE_VERSION if the old
+state cannot be read any more).
 """
 from __future__ import annotations
 
 import asyncio
+import hashlib
+import json
 import logging
 import random
 import time
@@ -35,6 +44,15 @@ log = logging.getLogger("h2h")
 WAITING, PLACING, PLAYING, FINISHED, ABANDONED = "waiting", "placing", "playing", "finished", "abandoned"
 # end reasons: fleet_sunk | resigned | idle | disconnect | abandoned
 LEFT_EARLY = ("resigned", "idle", "disconnect")
+STATE_VERSION = 1
+
+
+def _iso(dt: Optional[datetime]) -> Optional[str]:
+    return dt.isoformat() if dt else None
+
+
+def _dt(s: Optional[str]) -> Optional[datetime]:
+    return datetime.fromisoformat(s) if s else None
 
 
 class Match:
@@ -68,6 +86,9 @@ class Match:
         self._timer: Optional[asyncio.Task] = None
         self._dc_timers: Dict[uuid.UUID, asyncio.Task] = {}
         self._saved = False
+        self.restored_until: Optional[float] = None       # the restart grace window
+        self._grace: Optional[asyncio.Task] = None
+        self.persisted_hash: Optional[str] = None         # content last written to live_matches
         self._on_finish = on_finish
         self._add_player(host)
         self._arm(settings.room_wait_s, self._expire_waiting)
@@ -122,6 +143,8 @@ class Match:
     def _disarm_all(self):
         self._disarm()
         self._move_left = None
+        self._cancel(self._grace)
+        self._grace = None
         for t in self._dc_timers.values():
             self._cancel(t)
         self._dc_timers.clear()
@@ -148,8 +171,19 @@ class Match:
         return max(0.0, left)
 
     def _reconnecting(self, pid: uuid.UUID) -> bool:
-        """Offline with budget left: the player's move timer waits."""
-        return self.sockets.get(pid) is None and pid in self.offline_since and self._budget_now(pid) > 0
+        """Offline with budget left (or right after a restart): the player's move timer waits."""
+        if self.sockets.get(pid) is not None:
+            return False
+        if pid in self.offline_since:
+            return self._budget_now(pid) > 0
+        return self.restored_until is not None and time.time() < self.restored_until
+
+    def _reconnect_deadline(self, pid: uuid.UUID) -> Optional[float]:
+        if not self.active or not self._reconnecting(pid):
+            return None
+        if pid in self.offline_since:
+            return time.time() + self._budget_now(pid)
+        return self.restored_until + self.budget_left[pid]       # the grace window, then the budget
 
     def _start_offline_clock(self, pid: uuid.UUID):
         self.offline_since[pid] = time.time()
@@ -208,8 +242,7 @@ class Match:
             opponent = {"name": name, "tag": tag, "connected": self.sockets.get(opp) is not None,
                         "placed": theirs is not None,
                         # the opponent is reconnecting until then; None — online or the budget is spent
-                        "reconnect_deadline_ts": (time.time() + self._budget_now(opp))
-                        if self.active and self._reconnecting(opp) else None}
+                        "reconnect_deadline_ts": self._reconnect_deadline(opp)}
         solo = self.solo == pid
         return {
             "t": "state",
@@ -494,6 +527,106 @@ class Match:
             return
         self._saved = True
         await self._on_finish(self)
+
+    # ---- restart ----
+    def to_state(self, clocks: bool = True) -> dict:
+        """Everything needed to continue the match in another process (JSON)."""
+        now = time.time()
+        d: Dict[str, Any] = {
+            "v": STATE_VERSION, "id": str(self.id), "kind": self.kind, "code": self.code, "status": self.status,
+            "players": [str(p) for p in self.players],
+            "names": {str(p): list(v) for p, v in self.names.items()},
+            "ships": {str(p): b.ships for p, b in self.boards.items()},
+            "shots": {str(p): list(v) for p, v in self.shots.items()},
+            "think_ms": {str(p): list(v) for p, v in self.think_ms.items()},
+            "placement_mode": {str(p): v for p, v in self.placement_mode.items()},
+            "auto_moves": {str(p): list(v) for p, v in self.auto_moves.items()},
+            "auto_streak": {str(p): v for p, v in self.auto_streak.items()},
+            "turn": str(self.turn) if self.turn else None,
+            "winner": str(self.winner) if self.winner else None,
+            "end_reason": self.end_reason, "solo": str(self.solo) if self.solo else None,
+            "created_at": _iso(self.created_at), "started_at": _iso(self.started_at),
+            "finished_at": _iso(self.finished_at),
+        }
+        if clocks:
+            # remaining time, not deadlines: the downtime must not count
+            d["clocks"] = {
+                "budget_left": {str(p): round(self._budget_now(p), 3) for p in self.players},
+                "timer_left": round(max(0.0, self.deadline_ts - now), 3) if self.deadline_ts else None,
+                "move_left": self._move_left,
+                "think_elapsed": round(now - self._turn_since, 3) if self._turn_since else 0.0,
+            }
+        return d
+
+    def content_hash(self) -> str:
+        """Changes on moves and phase changes, not with the ticking clocks."""
+        return hashlib.sha1(json.dumps(self.to_state(clocks=False), sort_keys=True).encode()).hexdigest()
+
+    @classmethod
+    def from_state(cls, d: dict, on_finish: Callable[["Match"], Awaitable[None]]) -> "Match":
+        if d.get("v") != STATE_VERSION:
+            raise ValueError(f"state v{d.get('v')}, ожидается v{STATE_VERSION}")
+        players = [uuid.UUID(p) for p in d["players"]]
+        m = cls(d["kind"], players[0], d["code"], on_finish)
+        m._disarm()                                        # __init__ armed the waiting room
+        m.id = uuid.UUID(d["id"])
+        for p in players[1:]:
+            m._add_player(p)
+        U = uuid.UUID
+        m.status = d["status"]
+        m.names = {U(p): (v[0], v[1]) for p, v in d["names"].items()}
+        m.shots = {U(p): list(v) for p, v in d["shots"].items()}
+        m.think_ms = {U(p): list(v) for p, v in d["think_ms"].items()}
+        m.placement_mode = {U(p): v for p, v in d["placement_mode"].items()}
+        m.auto_moves.update({U(p): list(v) for p, v in d["auto_moves"].items()})
+        m.auto_streak.update({U(p): int(v) for p, v in d["auto_streak"].items()})
+        for p, ships in d["ships"].items():
+            board = Board(ships)
+            opp = m.opponent(U(p))
+            for c in m.shots.get(opp, []) if opp else []:
+                board.shoot(c)                            # IllegalShot — a broken state, the caller skips it
+            m.boards[U(p)] = board
+        m.turn = U(d["turn"]) if d["turn"] else None
+        m.winner = U(d["winner"]) if d["winner"] else None
+        m.end_reason = d["end_reason"]
+        m.solo = U(d["solo"]) if d["solo"] else None
+        m.created_at = _dt(d["created_at"]) or m.created_at
+        m.started_at, m.finished_at = _dt(d["started_at"]), _dt(d["finished_at"])
+        clocks = d.get("clocks") or {}
+        m.budget_left.update({U(p): float(v) for p, v in (clocks.get("budget_left") or {}).items()})
+        m._move_left = clocks.get("move_left")
+        m._turn_since = time.time() - float(clocks.get("think_elapsed") or 0.0)
+        m._resume_after_restart(clocks.get("timer_left"))
+        return m
+
+    def _resume_after_restart(self, timer_left: Optional[float]):
+        """Nobody is connected yet: re-arm the timers from what was left, open the grace window."""
+        self.restored_until = time.time() + settings.restart_grace_s
+        if self.status == WAITING:
+            self._arm(settings.room_wait_s, self._expire_waiting)
+        elif self.status == PLACING:
+            self._arm(max(timer_left or settings.placing_s, settings.restart_grace_s), self._expire_placing)
+        elif self.status == PLAYING:
+            # the turn waits: connect() resumes it, or the end of the grace window
+            if self._move_left is None:
+                self._move_left = timer_left if timer_left is not None else settings.move_s
+        elif self.status == FINISHED and self.solo is not None:
+            self._timer = self._later(settings.solo_idle_s, self._end_solo)
+        if self.active:
+            self._grace = self._later(settings.restart_grace_s, self._restart_grace_over)
+
+    async def _restart_grace_over(self):
+        self._grace = None
+        self.restored_until = None
+        if self.status not in (PLACING, PLAYING):
+            return
+        for p in self.players:
+            if self.sockets.get(p) is None and p not in self.offline_since:
+                self._start_offline_clock(p)               # the usual reconnect budget from now on
+        if self.status == PLAYING and self._move_left is not None:
+            self._arm_move(self._move_left)
+        for p in self.players:
+            await self._send(p, self.snapshot(p))
 
     # ---- DB rows ----
     def db_rows(self) -> tuple[MatchRow, List[GameLog]]:

@@ -217,6 +217,11 @@ phase (`split_by_phase`).
   board ("solo") — the logs are written only after the solo. `avg_shots` counts cleared boards
   only: a partial board would flatter the one who left. Auto-moves are marked in
   `client_info.auto_moves` — they are not human decisions, `compare_moves` skips them.
+* H2H matches survive a restart: `Match.to_state()/from_state()` → `live_matches`
+  (checkpoint ≤1 s after a change, full dump on SIGTERM, restore before serving).
+  A new `Match` field must go into both (bump `STATE_VERSION` if old states become
+  unreadable). Clocks are stored as time left, never as deadlines. The image `CMD` must
+  `exec uvicorn`: with plain `sh -c` SIGTERM never reaches it.
 * Reports (`POST /api/matches/{id}/report`) are bound to a match, one per match per reporter,
   always 204. `reports.match_id` has no FK: the `h2h_matches` row is written only when the
   match ends. 3 different reporters on the current name hide it; cheating and "something

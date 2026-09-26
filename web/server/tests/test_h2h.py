@@ -136,3 +136,69 @@ async def test_no_solo_after_a_normal_win(fast):
         m.turn = a
         await m.shoot(a, c)
     assert m.end_reason == "fleet_sunk" and m.solo is None and saved
+
+
+# ---- restart: to_state / from_state ----
+
+def roundtrip(m, saved):
+    import json
+
+    async def on_finish(mm):
+        saved.append(mm)
+
+    state = json.loads(json.dumps(m.to_state()))       # through JSON, as in live_matches
+    m._disarm_all()
+    return Match.from_state(state, on_finish)
+
+
+async def test_state_roundtrip_mid_game(fast):
+    m, a, b, wa, wb, _ = await started()
+    await m.shoot(a, 0)                                 # a hit: a keeps the turn
+    await m.shoot(a, 99)                                # a miss: b's turn
+    before_a, before_b = m.snapshot(a), m.snapshot(b)
+    saved = []
+    r = roundtrip(m, saved)
+    assert r.id == m.id and r.turn == b and r.shots == m.shots and r.think_ms == m.think_ms
+    after_a, after_b = r.snapshot(a), r.snapshot(b)
+    for key in ("phase", "you", "enemy", "your_turn", "auto_streak", "winner"):
+        assert after_a[key] == before_a[key] and after_b[key] == before_b[key], key
+    assert r.boards[b].n_shots == 2 and r.boards[b].hit[0] == 1
+    # the turn waits for the players to come back; the opponent sees "reconnecting"
+    assert r.deadline_ts is None and 0 < r._move_left <= settings.move_s
+    assert after_a["opponent"]["reconnect_deadline_ts"] is not None
+    r._disarm_all()
+
+
+async def test_restored_turn_waits_and_resumes_on_connect(fast, monkeypatch):
+    monkeypatch.setattr(settings, "restart_grace_s", 0.5)
+    m, a, b, wa, wb, _ = await started()
+    r = roundtrip(m, [])
+    await asyncio.sleep(0.4)                            # longer than a move: no auto-shot in the window
+    assert r.shots[a] == []
+    await r.connect(a, FakeWS(), None, "aaaa")
+    assert r.deadline_ts is not None and r.budget_left[a] == pytest.approx(1.0, abs=0.01)
+    await asyncio.sleep(0.4)
+    assert len(r.auto_moves[a]) == 1                    # back online — the timer runs again
+    r._disarm_all()
+
+
+async def test_grace_end_starts_the_usual_budget(fast, monkeypatch):
+    monkeypatch.setattr(settings, "restart_grace_s", 0.2)
+    m, a, b, wa, wb, _ = await started()
+    r = roundtrip(m, [])
+    await asyncio.sleep(0.3)                            # nobody came back: the budget is spent from now
+    assert a in r.offline_since and b in r.offline_since and r.shots[a] == []
+    await asyncio.sleep(1.3)                            # budget (1 s) spent + the rest of the move
+    assert r.auto_moves[a]
+    r._disarm_all()
+
+
+async def test_solo_survives_restart(fast):
+    m, a, b, wa, wb, _ = await started()
+    await m.leave(b)
+    saved = []
+    r = roundtrip(m, saved)
+    assert r.status == FINISHED and r.solo == a and r.snapshot(a)["your_turn"] is True
+    for c in ALL_SHOTS:
+        assert await r.shoot(a, c) is None
+    assert saved and r.boards[b].done and r.solo is None

@@ -146,6 +146,9 @@ const en = {
     soloOffer: "The match is yours. The board stays as it is — clear it to count the result in your average shots.",
     cleared: (n: number) => `Board cleared in ${n} shots.`,
     reconnecting: "connection lost, reconnecting…",
+    restarting: "the server is being updated — the game will continue in a few seconds",
+    goneTitle: "Match not found",
+    goneText: "The server does not know this match any more — it has probably ended.",
     reason: (reason: string, youWon: boolean | null, idleLimit = 5): string => ({
       fleet_sunk: youWon ? "You sank the opponent's fleet." : "The opponent sank your fleet.",
       resigned: youWon ? "The opponent surrendered." : "You surrendered.",
@@ -325,6 +328,9 @@ const ru: Dict = {
     soloOffer: "Победа за вами. Поле соперника осталось как есть — дочистите его, и результат пойдёт в среднее число выстрелов.",
     cleared: (n) => `Поле зачищено за ${n} выстрелов.`,
     reconnecting: "связь потеряна, переподключаемся…",
+    restarting: "сервер обновляется — партия продолжится через несколько секунд",
+    goneTitle: "Матч не найден",
+    goneText: "Сервер больше не знает этот матч — скорее всего, он уже закончился.",
     reason: (reason, youWon, idleLimit = 5) => ({
       fleet_sunk: youWon ? "Вы потопили флот соперника." : "Соперник потопил ваш флот.",
       resigned: youWon ? "Соперник сдался." : "Вы сдались.",

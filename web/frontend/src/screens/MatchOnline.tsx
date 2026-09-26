@@ -185,10 +185,13 @@ export function MatchOnline() {
   const reportLink = view?.opponent ? <ReportLink sent={report.sent} onOpen={() => report.setOpen(true)} /> : null;
   const reportDialog = report.open && <ReportDialog onSend={report.send} onClose={() => report.setOpen(false)} />;
 
+  const goneOverlay = <GameOver title={t.online.goneTitle} text={t.online.goneText} primary={t.btn.home} onPrimary={() => navigate("/")} />;
+
   const header = <Header subtitle={view?.opponent ? t.online.vs(foeName) : t.online.h2h} />;
 
   if (!view) {
-    return <div className="page">{header}<p className="hint">{wsStatus === "closed" ? t.online.noConnection : t.online.connecting}</p></div>;
+    if (wsStatus === "gone") return <div className="page">{header}{goneOverlay}</div>;
+    return <div className="page">{header}<p className="hint">{wsStatus === "restarting" ? t.online.restarting : wsStatus === "closed" ? t.online.noConnection : t.online.connecting}</p></div>;
   }
 
   if (view.phase === "waiting") {
@@ -260,7 +263,8 @@ export function MatchOnline() {
             {foeAway && !over && hint !== foeAway && <span className="muted">{foeAway}</span>}
             {autoWarning && <span className="error">{autoWarning}</span>}
             {view.error && <span className="error">{errorText}</span>}
-            {wsStatus !== "open" && <span className="error">{t.online.reconnecting}</span>}
+            {wsStatus === "restarting" && <span className="error">{t.online.restarting}</span>}
+            {(wsStatus === "closed" || wsStatus === "connecting") && <span className="error">{t.online.reconnecting}</span>}
           </div>
           <div className="divider" />
           <FleetCounter alive={view.enemyAlive} />
@@ -287,6 +291,7 @@ export function MatchOnline() {
           extra={reportLink} />
       )}
       {reportDialog}
+      {wsStatus === "gone" && !over && goneOverlay}
     </div>
   );
 }

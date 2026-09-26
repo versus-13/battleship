@@ -23,9 +23,14 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(levelname
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    sweeper = asyncio.create_task(registry.sweep_forever())
+    # before serving: a client reconnecting after an update must find its match
+    await registry.restore()
+    background = [asyncio.create_task(registry.sweep_forever()), asyncio.create_task(registry.checkpoint_forever())]
     yield
-    sweeper.cancel()
+    # uvicorn has already closed the sockets (1012); the clients are reconnecting
+    for t in background:
+        t.cancel()
+    await registry.shutdown()
     await engine.dispose()
 
 

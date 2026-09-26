@@ -34,6 +34,10 @@ class Settings(BaseSettings):
     disconnect_after_budget_s: float = 120  # offline this long after the budget ran out — loss
     solo_idle_s: float = 5 * 60             # finishing the board after the opponent left
     disconnect_grace_s: float = 60          # the host left the waiting room
+    # restart: unfinished matches are saved (checkpoint_s after a change, fully on shutdown)
+    # and restored; for restart_grace_s after startup offline time costs nobody anything
+    restart_grace_s: float = 60
+    checkpoint_s: float = 1.0
     queue_ttl_s: int = 120
 
 

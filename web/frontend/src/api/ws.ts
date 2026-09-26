@@ -43,12 +43,19 @@ export type ServerMsg =
       solo: boolean; n_shots?: number; cleared?: boolean }
   | { t: "error"; code: string; msg?: string } | { t: "pong" };
 
-export type WsStatus = "connecting" | "open" | "closed";
+/**
+ * restarting — the server closed with 1012 (an update): it saves the matches and restores them
+ * on start, so we keep reconnecting and say so; gone — 4004, the match does not exist (any more).
+ */
+export type WsStatus = "connecting" | "open" | "closed" | "restarting" | "gone";
+
+const RETRY_MAX_MS = 4000;
 
 export class MatchSocket {
   private ws: WebSocket | null = null;
   private closed = false;
   private attempt = 0;
+  private restarting = false;
   status: WsStatus = "connecting";
 
   constructor(
@@ -66,8 +73,9 @@ export class MatchSocket {
     const proto = location.protocol === "https:" ? "wss" : "ws";
     const ws = new WebSocket(`${proto}://${location.host}/ws/matches/${this.matchId}`);
     this.ws = ws;
-    this.setStatus("connecting");
+    if (!this.restarting) this.setStatus("connecting");
     ws.onopen = () => {
+      this.restarting = false;
       this.attempt = 0;
       ws.send(JSON.stringify({ t: "hello", token: secret }));
       this.setStatus("open");
@@ -77,9 +85,11 @@ export class MatchSocket {
     };
     ws.onclose = (ev) => {
       if (this.ws !== ws || this.closed) return;
-      this.setStatus("closed");
-      if (ev.code === 4003 || ev.code === 4004 || ev.code === 4000) return;
-      const delay = Math.min(8000, 500 * 2 ** this.attempt++);
+      if (ev.code === 4004) { this.setStatus("gone"); return; }
+      if (ev.code === 1012) this.restarting = true;      // while the server is down attempts fail with 1006
+      this.setStatus(this.restarting ? "restarting" : "closed");
+      if (ev.code === 4003 || ev.code === 4000) return;
+      const delay = Math.min(RETRY_MAX_MS, 500 * 2 ** this.attempt++);
       setTimeout(() => void this.connect(), delay);
     };
   }

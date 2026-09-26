@@ -36,6 +36,8 @@ services:
   api:
     image: ghcr.io/versus-13/battleship-api:${TAG:-latest}
     restart: unless-stopped
+    # time to save the unfinished matches on SIGTERM (they are restored on start)
+    stop_grace_period: 30s
     <<: *hardening
     user: "${APP_UID:-10001}:${APP_GID:-10001}"
     environment:

@@ -105,6 +105,15 @@ class Report(Base):
     )
 
 
+class LiveMatch(Base):
+    """An unfinished H2H match (Match.to_state()): restored on startup, deleted when it ends."""
+    __tablename__ = "live_matches"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True)
+    state: Mapped[dict] = mapped_column(JSONB, nullable=False)
+    saved_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+
 class NameReject(Base):
     __tablename__ = "name_rejects"
 
