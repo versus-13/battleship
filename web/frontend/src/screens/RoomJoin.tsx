@@ -1,6 +1,7 @@
 /** Join by link /room/:code — show the host and join. */
 import { useEffect, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useParams } from "react-router-dom";
+import { useLangNavigate } from "../langRoute";
 import { ApiError, api, displayName } from "../api/client";
 import { Header } from "../components/Header";
 import { useI18n } from "../i18n";
@@ -10,7 +11,7 @@ type RoomError = "busy" | "notFound" | "taken" | "joinFailed";
 export function RoomJoin() {
   const { code = "" } = useParams();
   const { t } = useI18n();
-  const navigate = useNavigate();
+  const navigate = useLangNavigate();
   const [host, setHost] = useState<{ name: string | null; tag: string } | null>(null);
   const [error, setError] = useState<RoomError | null>(null);
   const [busy, setBusy] = useState(false);

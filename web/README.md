@@ -46,6 +46,26 @@ cd web/frontend && node e2e/queue.mjs       # name moderation, random queue, sur
 Fixtures are regenerated from Python (`model/`):
 `python -m battleship.fixtures` (engine.json) and `python -m battleship.export_onnx` (onnx.json + the model).
 
+## Brand and SEO
+
+English lives at `/`, Russian at `/ru/` — the same app, the language is part of the URL so
+crawlers and link previews get a stable one. Metadata (title, description, canonical, hreflang,
+Open Graph, JSON-LD) is per language in `frontend/seo.config.ts`; a Vite plugin renders it into
+`dist/index.html` and `dist/ru/index.html`, nginx serves the latter for `/ru/*`. The tab title the
+app sets is `documentTitle` in `i18n.ts` — keep it equal to `title` in `seo.config.ts`. The domain
+`hullbreak.com` is also written in `public/robots.txt` and `public/sitemap.xml`.
+
+In the app: navigate with `useLangNavigate()` / `useLangPath()` (`src/langRoute.ts`), not plain
+`useNavigate` — otherwise a link drops the `/ru` prefix. Routes are declared as `/ru?/...`, so a
+language switch keeps the screen mounted. Only an explicit choice is remembered (the switcher or
+`?lang=ru`): a remembered `ru` sends `/` to `/ru/`, opening someone's `/ru/` link changes nothing.
+
+`hullbreak.ru` has no content: the external proxy redirects it to `hullbreak.com/ru$uri?lang=ru`.
+
+Icons and the social cards (`og.png`, `og-ru.png`, 1200×630) are rendered from
+`frontend/brand/icon.svg` and `frontend/brand/og.html` by `frontend/brand/render.py` (Playwright
+for Python, see the docstring); the PNGs in `public/` are committed.
+
 ## Deploying to a VPS
 
 The project ships only the containers, bound to localhost: `api` on 127.0.0.1:8000 and
@@ -73,11 +93,12 @@ with a `read:packages` token.
 # 1. on the VPS: docker
 curl -fsSL https://get.docker.com | sudo sh && sudo usermod -aG docker $USER   # re-login
 
-# 2. two files from the repository (web/deploy/) — scp from the dev machine also works
+# 2. files from the repository (web/deploy/) — scp from the dev machine also works
 sudo mkdir -p /opt/battleship && sudo chown $USER /opt/battleship && cd /opt/battleship
 curl -fsSLO https://raw.githubusercontent.com/versus-13/battleship/master/web/deploy/docker-compose.prod.yml
 curl -fsSLO https://raw.githubusercontent.com/versus-13/battleship/master/web/deploy/backup.sh
-mv docker-compose.prod.yml docker-compose.yml && chmod +x backup.sh
+curl -fsSLO https://raw.githubusercontent.com/versus-13/battleship/master/web/deploy/stats.sh
+mv docker-compose.prod.yml docker-compose.yml && chmod +x backup.sh stats.sh
 echo "POSTGRES_PASSWORD=$(openssl rand -hex 24)" > .env
 # optional: UID/GID for api and frontend (default 10001). It must NOT belong to a real
 # host user — especially not one in the docker group, which is root-equivalent.
@@ -96,9 +117,17 @@ docker compose pull && docker compose up -d
 curl -s localhost:8000/healthz        # {"ok":true,...}
 curl -sI localhost:8080/ | head -1    # HTTP/1.1 200
 
-# 4. backups (the reverse proxy and firewall are configured separately)
+# 4. backups and daily stats (the reverse proxy and firewall are configured separately)
 (crontab -l 2>/dev/null; echo "0 4 * * * /opt/battleship/backup.sh") | crontab -
+mkdir -p stats && ./stats.sh <launch-date> "$(date +%F)"   # backfill (today is skipped), then daily:
+(crontab -l 2>/dev/null; echo "10 0 * * * /opt/battleship/stats.sh >> /opt/battleship/stats/cron.log 2>&1") | crontab -
 ```
+
+`stats.sh` appends one row per day (games vs model / vs human, active and returning players,
+new visitors, totals — the columns are described at the top of the script) to
+`stats/daily.tsv`. It only reads the database and is not part of the app. Days are counted in
+`STATS_TZ` (default `Europe/Moscow`); the cron time must be after midnight there. Read it with
+`column -t -s $'\t' stats/daily.tsv | less -S`.
 
 **Updating** (once the workflow on `master` is green):
 

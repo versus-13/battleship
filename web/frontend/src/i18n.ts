@@ -15,7 +15,9 @@ const RU_LETTERS = ["А", "Б", "В", "Г", "Д", "Е", "Ж", "З", "И", "К"];
 
 const en = {
   langName: "English",
-  title: "Battleship",
+  title: "Hullbreak",
+  // documentTitle = title in seo.config.ts: the static head and the tab must agree
+  documentTitle: "Hullbreak — Play Battleship Online with a Friend",
   letters: EN_LETTERS,
   cell: (i: number) => `${EN_LETTERS[colOf(i)]}${rowOf(i) + 1}`,
   player: "Player",
@@ -197,7 +199,8 @@ export type Dict = typeof en;
 
 const ru: Dict = {
   langName: "Русский",
-  title: "Морской бой",
+  title: "Hullbreak",
+  documentTitle: "Hullbreak — морской бой онлайн с другом",
   letters: RU_LETTERS,
   cell: (i) => `${RU_LETTERS[colOf(i)]}${rowOf(i) + 1}`,
   player: "Игрок",
@@ -379,28 +382,70 @@ const DICTS: Record<Lang, Dict> = { en, ru };
 /** Each language named in itself — for the switcher. */
 export const LANG_NAMES: Record<Lang, string> = { en: en.langName, ru: ru.langName };
 
-function initialLang(): Lang {
+/** Language of a URL: /ru/... is Russian, everything else English. */
+export function langOfPath(pathname: string): Lang {
+  return /^\/ru(\/|$)/.test(pathname) ? "ru" : "en";
+}
+
+/** The path without the language prefix: /ru/play → /play, /ru → /. */
+export function stripLang(pathname: string): string {
+  return pathname.replace(/^\/ru(?=\/|$)/, "") || "/";
+}
+
+/** The path in the given language: (ru, /play) → /ru/play, (ru, /) → /ru/. */
+export function withLang(l: Lang, path: string): string {
+  if (l === "en") return path;
+  return path === "/" ? "/ru/" : `/ru${path}`;
+}
+
+function savedLang(): Lang | null {
   try {
     const saved = localStorage.getItem(KEY);
     if (saved === "en" || saved === "ru") return saved;
   } catch { /* private mode */ }
-  return "en";
+  return null;
 }
 
-let lang: Lang = initialLang();
+/** Remembers an explicit choice: the switcher or ?lang= (the hullbreak.ru redirect). */
+export function rememberLang(l: Lang) {
+  try { localStorage.setItem(KEY, l); } catch { /* ignore */ }
+}
+
+let lang: Lang = "en";
 const listeners = new Set<() => void>();
 
 function applyLang(l: Lang) {
   document.documentElement.lang = l;
-  document.title = DICTS[l].title;
+  document.title = DICTS[l].documentTitle;
 }
 
-export function initLang() { applyLang(lang); }
+/**
+ * The language lives in the URL (/ru/...), so crawlers and shared links get a stable one.
+ * Before the first render: ?lang=xx is an explicit choice — remember it and drop the param;
+ * a remembered ru on an unprefixed URL moves to /ru/. Opening someone's /ru/ link is not a
+ * choice and does not change what is remembered.
+ */
+export function initLang() {
+  const url = new URL(location.href);
+  const param = url.searchParams.get("lang");
+  let l = langOfPath(url.pathname);
+  if (param === "en" || param === "ru") {
+    l = param;
+    rememberLang(l);
+    url.searchParams.delete("lang");
+  } else if (l === "en" && savedLang() === "ru") {
+    l = "ru";
+  }
+  url.pathname = withLang(l, stripLang(url.pathname));
+  if (url.href !== location.href) history.replaceState(history.state, "", url);
+  lang = l;
+  applyLang(l);
+}
 
+/** Follows the URL; called by <LangSync> on navigation. To switch the language, change the URL. */
 export function setLang(l: Lang) {
   if (l === lang) return;
   lang = l;
-  try { localStorage.setItem(KEY, l); } catch { /* ignore */ }
   applyLang(l);
   listeners.forEach((fn) => fn());
 }
@@ -412,5 +457,5 @@ const subscribe = (fn: () => void) => { listeners.add(fn); return () => { listen
 
 export function useI18n() {
   const l = useSyncExternalStore(subscribe, () => lang);
-  return { lang: l, t: DICTS[l], setLang };
+  return { lang: l, t: DICTS[l] };
 }

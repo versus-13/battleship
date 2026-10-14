@@ -12,13 +12,16 @@ Next: the mobile app (`kmp/`) and fine-tuning on real logs.
 
 ## Stack and environment
 
-* Python 3.11 (venv). **Not 3.12+ and not 3.14** — PyTorch is not built for them
-  on Intel Mac. Development host: macOS Intel.
-* `torch==2.2.2` — the last branch with wheels for macOS x86_64.
-* numpy, onnx, onnxscript, onnxruntime.
+* Development host: macOS arm64 (moved from Intel in 2026-10; venvs and node_modules were
+  rebuilt — they are not portable between architectures). Homebrew: `python@3.11`, `node@20`,
+  `postgresql@16` (a `brew services` service).
+* Python 3.11 (venv), pinned in `model/requirements.txt`: `torch==2.2.2` (`net.pt` was trained
+  with it; it was the last branch for macOS x86_64), numpy, onnx, onnxscript, onnxruntime.
+  On arm64 newer torch exists — upgrading is possible but re-measure before trusting it.
 
 ```bash
-cd model && source .venv/bin/activate
+cd model && python3.11 -m venv .venv && .venv/bin/pip install -r requirements.txt   # once
+source .venv/bin/activate
 python -m battleship.train --rounds 8 --games 400 --epochs 3
 python -m battleship.inspect_game --ckpt battleship/net.pt --step --compare
 python -m battleship.export_onnx        # net.pt → web/frontend/public/model/*.onnx + web/fixtures/onnx.json
@@ -226,6 +229,9 @@ phase (`split_by_phase`).
   always 204. `reports.match_id` has no FK: the `h2h_matches` row is written only when the
   match ends. 3 different reporters on the current name hide it; cheating and "something
   broke" go to text files in `BS_REPORTS_DIR` for manual review — never automated.
+* The language is part of the URL: `/` English, `/ru/` Russian, each with its own static head
+  (`frontend/seo.config.ts`, crawlers do not run JS). Navigate only via `useLangNavigate` /
+  `useLangPath` from `src/langRoute.ts`, or the `/ru` prefix is lost. Details in `web/README.md`.
 * React StrictMode mounts twice: side effects (AI timer, socket) go only in
   `start()/stop()` and effects, not constructors; in `MatchSocket` the `onclose` of
   a discarded socket must not touch state.

@@ -1,0 +1,10 @@
+# Rooms and matches are private and short-lived: nothing to index there.
+User-agent: *
+Disallow: /api/
+Disallow: /ws
+Disallow: /room/
+Disallow: /match/
+Disallow: /ru/room/
+Disallow: /ru/match/
+
+Sitemap: https://hullbreak.com/sitemap.xml

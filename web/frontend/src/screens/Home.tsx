@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link } from "react-router-dom";
+import { useLangNavigate, useLangPath } from "../langRoute";
 import { getAgent } from "../ai/loader";
 import { ApiError, api, displayName, type LeaderRow, type Me } from "../api/client";
 import { Header } from "../components/Header";
@@ -12,7 +13,8 @@ function nameErrorText(t: ReturnType<typeof tr>, code: string) {
 
 export function Home() {
   const { t } = useI18n();
-  const navigate = useNavigate();
+  const navigate = useLangNavigate();
+  const lp = useLangPath();
   const [me, setMe] = useState<Me | null>(null);
   const [offline, setOffline] = useState(false);
   const [name, setName] = useState("");
@@ -61,7 +63,7 @@ export function Home() {
             <button type="button" className="btn btn--block" onClick={createRoom} disabled={offline || busy !== null}>{t.home.invite}</button>
             <button type="button" className="btn btn--block" onClick={() => navigate("/queue")} disabled={offline}>{t.home.findOpponent}</button>
             {current && (
-              <Link className="btn btn--secondary btn--block" style={{ display: "flex", alignItems: "center", justifyContent: "center" }} to={`/match/${current.match_id}`}>{t.home.backToMatch}</Link>
+              <Link className="btn btn--secondary btn--block" style={{ display: "flex", alignItems: "center", justifyContent: "center" }} to={lp(`/match/${current.match_id}`)}>{t.home.backToMatch}</Link>
             )}
           </div>
           <div className="divider" />

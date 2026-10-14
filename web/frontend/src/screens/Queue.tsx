@@ -1,13 +1,13 @@
 /** Random queue: poll the server every 2 s until a pair is found. */
 import { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useLangNavigate } from "../langRoute";
 import { api } from "../api/client";
 import { Header } from "../components/Header";
 import { useI18n } from "../i18n";
 
 export function Queue() {
   const { t } = useI18n();
-  const navigate = useNavigate();
+  const navigate = useLangNavigate();
   const [seconds, setSeconds] = useState(0);
   const [error, setError] = useState(false);
 

@@ -1,0 +1,6 @@
+# Python 3.11. torch 2.2.2 needs numpy<2; net.pt was trained with this torch.
+torch==2.2.2
+numpy==1.26.4
+onnx==1.23.0
+onnxscript==0.7.2
+onnxruntime==1.23.2

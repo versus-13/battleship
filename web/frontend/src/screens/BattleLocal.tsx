@@ -1,6 +1,6 @@
 /** Human-vs-model battle screen. */
 import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
-import { useNavigate } from "react-router-dom";
+import { useLangNavigate } from "../langRoute";
 import type { Agent } from "../ai/agent";
 import { Board, shipsView, type CellView, type ShipView } from "../components/Board";
 import { FleetCounter } from "../components/FleetCounter";
@@ -19,7 +19,7 @@ export function cellViews(b: Engine): CellView[] {
 
 export function BattleLocal({ ships, placement, agent, onNewGame }: { ships: Ships; placement: PlacementMode; agent: Agent; onNewGame: () => void }) {
   const { t } = useI18n();
-  const navigate = useNavigate();
+  const navigate = useLangNavigate();
   const [match, setMatch] = useState(() => new LocalMatch(ships, agent, placement));
   useEffect(() => { match.start(); return () => match.stop(); }, [match]);
   const s = useSyncExternalStore(match.subscribe, match.getSnapshot);

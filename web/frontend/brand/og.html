@@ -1,0 +1,93 @@
+<!doctype html>
+<!-- Social preview card, 1200×630. Rendered by render.py: og.html → public/og.png, og.html?lang=ru → public/og-ru.png. -->
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Caveat:wght@700&family=IBM+Plex+Mono:wght@500&display=block" />
+<style>
+  :root { --paper: #FAF8F1; --page-line: #D6E0E9; --grid-line: #A9C3D8; --ink: #2A4A9A; --text: #1B2F63;
+          --hit: #C2392F; --pencil: #6A7280; --cell: 30px; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; }
+  body {
+    width: 1200px; height: 630px; overflow: hidden; position: relative;
+    font-family: 'IBM Plex Mono', monospace; color: var(--text);
+    background-color: var(--paper);
+    background-image:
+      repeating-linear-gradient(to right, var(--page-line) 0 1px, transparent 1px var(--cell)),
+      repeating-linear-gradient(to bottom, var(--page-line) 0 1px, transparent 1px var(--cell));
+  }
+  .margin { position: absolute; left: 90px; top: 0; bottom: 0; width: 2px; background: rgba(194, 57, 47, 0.4); }
+  .text { position: absolute; left: 130px; top: 96px; width: 520px; }
+  h1 { margin: 0; font-family: 'Caveat', cursive; font-weight: 700; font-size: 168px; line-height: 0.9; letter-spacing: -1px; }
+  .tag { margin: 26px 0 0; font-size: 31px; line-height: 1.35; }
+  .tag b { color: var(--hit); font-weight: 500; }
+  .chips { display: flex; gap: 12px; margin-top: 34px; }
+  .chip { padding: 8px 14px; border: 2px solid rgba(42, 74, 154, 0.45); border-radius: 2px; font-size: 19px; letter-spacing: 0.04em; }
+  .url { position: absolute; left: 130px; bottom: 44px; font-size: 22px; letter-spacing: 0.08em; color: var(--pencil); }
+  svg { position: absolute; left: 700px; top: 95px; }
+</style>
+</head>
+<body>
+  <div class="margin"></div>
+  <div class="text">
+    <h1>Hullbreak</h1>
+    <p class="tag" id="tag"></p>
+    <div class="chips" id="chips"></div>
+  </div>
+  <div class="url" id="url"></div>
+  <svg id="board" width="440" height="440" viewBox="0 0 440 440"></svg>
+<script>
+  // An opponent's board mid-game: a sunk 4-decker and a single with their perimeters open,
+  // a 3-decker hit twice, the next aim below it. Ship outlines and marks follow src/components/marks.tsx.
+  const C = 40, O = 40;                       // cell size, offset for the rulers
+  const TEXT = {
+    en: { tag: "Battleship online.<br/>Sink a <b>friend</b> — or the AI.", chips: ["free", "no sign-up", "10 × 10"],
+          url: "hullbreak.com", letters: "ABCDEFGHIJ" },
+    ru: { tag: "Морской бой онлайн.<br/>Потопи <b>друга</b> — или ИИ.", chips: ["бесплатно", "без регистрации", "10 × 10"],
+          url: "hullbreak.ru", letters: "АБВГДЕЖЗИК" },
+  }[new URLSearchParams(location.search).get("lang") === "ru" ? "ru" : "en"];
+  document.getElementById("tag").innerHTML = TEXT.tag;
+  document.getElementById("chips").innerHTML = TEXT.chips.map((c) => `<span class="chip">${c}</span>`).join("");
+  document.getElementById("url").textContent = TEXT.url;
+  const LETTERS = TEXT.letters;
+  const misses = [[3,7],[4,2],[6,4],[9,1],[2,9],[5,0]];
+  const hits = [[4,7],[5,7]];
+  const sunk = [{ r: 1, c: 1, len: 4 }, { r: 8, c: 6, len: 1 }];
+  const opened = new Set();
+  for (const s of sunk)
+    for (let r = s.r - 1; r <= s.r + 1; r++)
+      for (let c = s.c - 1; c <= s.c + s.len; c++)
+        if (r >= 0 && r < 10 && c >= 0 && c < 10 && !(r === s.r && c >= s.c && c < s.c + s.len)) opened.add(r * 10 + c);
+  for (const [r, c] of misses) opened.add(r * 10 + c);
+
+  let s = "";
+  for (let i = 0; i < 10; i++) {
+    s += `<text x="${O + i * C + C / 2}" y="27" text-anchor="middle" font-size="17" fill="#6A7280">${LETTERS[i]}</text>`;
+    s += `<text x="${O / 2}" y="${O + i * C + C / 2 + 6}" text-anchor="middle" font-size="17" fill="#6A7280">${i + 1}</text>`;
+  }
+  s += `<rect x="${O}" y="${O}" width="${10 * C}" height="${10 * C}" fill="#FAF8F1"/>`;
+  for (let i = 0; i <= 10; i++) {
+    const w = i === 0 || i === 10 ? 2 : 1;
+    s += `<line x1="${O + i * C}" y1="${O}" x2="${O + i * C}" y2="${O + 10 * C}" stroke="#A9C3D8" stroke-width="${w}"/>`;
+    s += `<line x1="${O}" y1="${O + i * C}" x2="${O + 10 * C}" y2="${O + i * C}" stroke="#A9C3D8" stroke-width="${w}"/>`;
+  }
+  const at = (r, c) => `translate(${O + c * C} ${O + r * C})`;
+  for (const k of opened)
+    s += `<circle transform="${at(Math.floor(k / 10), k % 10)}" cx="20" cy="20.5" r="3" fill="#2A4A9A" fill-opacity="0.5"/>`;
+  const x = (r, c) => `<g transform="${at(r, c)}" fill="none" stroke="#C2392F" stroke-width="2.8" stroke-linecap="round">
+      <path d="M11 10.5 Q20.5 20 30 30"/><path d="M29.5 10.5 Q20 20.5 10.5 30"/></g>`;
+  const outline = { 1: "M6 6.4 L34.4 5.4 L35 33.8 L5.6 34.8 Z",
+                    4: "M6 6.3 L80 4.9 L154 6.1 L154.8 34.1 L80 35.6 L5.4 34.3 Z" };
+  for (const sh of sunk) {
+    s += `<path transform="${at(sh.r, sh.c)}" d="${outline[sh.len]}" fill="rgba(194,57,47,0.12)" stroke="#C2392F" stroke-width="2"/>`;
+    for (let c = sh.c; c < sh.c + sh.len; c++) s += x(sh.r, c);
+  }
+  for (const [r, c] of hits) s += x(r, c);
+  s += `<g transform="${at(6, 7)}"><rect x="0.5" y="0.5" width="39" height="39" fill="#2A4A9A" fill-opacity="0.08"/>
+      <path d="M20 5 L20 14 M20 26 L20 35 M5 20 L14 20 M26 20 L35 20" fill="none" stroke="#2A4A9A" stroke-width="1.8" stroke-linecap="round"/>
+      <circle cx="20" cy="20" r="6.5" fill="none" stroke="#2A4A9A" stroke-width="1.4" stroke-dasharray="2.5 3"/></g>`;
+  document.getElementById("board").innerHTML = s;
+</script>
+</body>
+</html>

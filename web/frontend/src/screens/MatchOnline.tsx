@@ -1,6 +1,7 @@
 /** Human-vs-human match: the server is the referee, this only renders and sends commands. */
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useParams } from "react-router-dom";
+import { useLangNavigate } from "../langRoute";
 import { displayName } from "../api/client";
 import { MatchSocket, type ServerMsg, type StateMsg, type WsStatus } from "../api/ws";
 import { Board, shipsView, type CellView, type ShipView } from "../components/Board";
@@ -11,7 +12,7 @@ import { Journal, type JournalEntry } from "../components/Journal";
 import { ReportDialog, ReportLink, useReport } from "../components/Report";
 import { FLEET, TOTAL_CELLS, randomPlacement, type Ships } from "../engine/rules";
 import type { PlacementMode } from "../game/telemetry";
-import { useI18n } from "../i18n";
+import { useI18n, withLang } from "../i18n";
 import { Placement } from "./Placement";
 
 interface View {
@@ -91,8 +92,8 @@ function groupSunk(cells: Map<number, string>): number[][] {
 
 export function MatchOnline() {
   const { id } = useParams();
-  const { t } = useI18n();
-  const navigate = useNavigate();
+  const { lang, t } = useI18n();
+  const navigate = useLangNavigate();
   const [view, setView] = useState<View | null>(null);
   const [wsStatus, setWsStatus] = useState<WsStatus>("connecting");
   const [ships, setShips] = useState<Ships>(() => randomPlacement());
@@ -195,7 +196,8 @@ export function MatchOnline() {
   }
 
   if (view.phase === "waiting") {
-    const link = `${location.origin}/room/${view.code}`;
+    // in the inviter's language: the link preview and the screen the friend lands on
+    const link = `${location.origin}${withLang(lang, `/room/${view.code}`)}`;
     return (
       <div className="page">{header}
         <section className="home__col">

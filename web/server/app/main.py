@@ -34,7 +34,7 @@ async def lifespan(app: FastAPI):
     await engine.dispose()
 
 
-app = FastAPI(title="Морской бой", version="0.1.0", lifespan=lifespan)
+app = FastAPI(title="Hullbreak", version="0.1.0", lifespan=lifespan)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origins,
@@ -76,4 +76,7 @@ if settings.static_dir and Path(settings.static_dir).is_dir():
         candidate = static / path
         if path and candidate.is_file():
             return FileResponse(candidate)
+        # /ru/... gets the Russian head (title, Open Graph); the app is the same
+        if (path == "ru" or path.startswith("ru/")) and (static / "ru" / "index.html").is_file():
+            return FileResponse(static / "ru" / "index.html")
         return FileResponse(static / "index.html")
